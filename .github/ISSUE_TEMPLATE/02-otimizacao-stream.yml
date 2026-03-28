@@ -1,0 +1,238 @@
+name: ⚡ Otimização de Stream
+description: Otimizar throughput, latência, consumer lag ou uso de recursos
+title: "[Otimização] <Descrição - ex: Paralelização de writes ClickHouse>"
+labels: ["tipo:otimizacao"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Template para Otimização de Stream
+        
+        Use este template para otimizações de performance em pipelines Bento.
+        
+        ---
+  
+  - type: textarea
+    id: problema
+    attributes:
+      label: Problema
+      description: Descreva o problema de performance
+      placeholder: |
+        Pipeline ab_retorno_renavam está com latência p95 de 350ms,
+        acima da meta de < 100ms. Consumer lag está crescendo
+        (atualmente 15k mensagens).
+        
+        Gargalo identificado: writes no ClickHouse estão em série,
+        apenas 1 batch por vez.
+    validations:
+      required: true
+  
+  - type: input
+    id: pipeline
+    attributes:
+      label: Pipeline Afetado
+      description: Qual pipeline precisa de otimização?
+      placeholder: "Ex: ab_retorno_renavam.yaml"
+    validations:
+      required: true
+  
+  - type: dropdown
+    id: componente
+    attributes:
+      label: Componente Gargalo
+      description: Onde está o bottleneck?
+      options:
+        - Input (Kafka consumer, HTTP, file)
+        - Processor (Bloblang, transformações)
+        - Output (ClickHouse, Kafka producer, HTTP)
+        - Buffer (memória, disco)
+        - Network (latência, bandwidth)
+    validations:
+      required: true
+  
+  - type: textarea
+    id: metricas_atuais
+    attributes:
+      label: Métricas Atuais
+      description: Estado atual de performance
+      placeholder: |
+        **Throughput:** 150 msg/s (meta: 500 msg/s)
+        **Latência p95:** 350ms (meta: < 100ms)
+        **Consumer lag:** 15k mensagens (crescendo)
+        **CPU:** 45% (1 core)
+        **Memory:** 512MB / 2GB
+    validations:
+      required: true
+  
+  - type: checkboxes
+    id: diagnostico
+    attributes:
+      label: Diagnóstico
+      description: Marque os problemas identificados
+      options:
+        - label: Baixo throughput (< meta esperada)
+          required: false
+        - label: Latência alta (> meta esperada)
+          required: false
+        - label: Consumer lag crescente
+          required: false
+        - label: Alto uso de CPU
+          required: false
+        - label: Alto uso de memória
+          required: false
+        - label: Bottleneck em I/O (disk, network)
+          required: false
+        - label: Serialização (processamento em série ao invés de paralelo)
+          required: false
+  
+  - type: checkboxes
+    id: solucoes
+    attributes:
+      label: Soluções Propostas
+      description: Marque as otimizações a serem aplicadas
+      options:
+        - label: "Aumentar paralelismo (processors: pool: X)"
+          required: false
+        - label: Otimizar Bloblang mapping (remover transformações desnecessárias)
+          required: false
+        - label: "Batch writes no output (batching: count, period)"
+          required: false
+        - label: "Ajustar buffer size (input/output)"
+          required: false
+        - label: Aumentar partições Kafka (input)
+          required: false
+        - label: Otimizar query ClickHouse (índices, ORDER BY)
+          required: false
+        - label: Adicionar cache (Redis, in-memory)
+          required: false
+        - label: Escalar horizontalmente (múltiplas instâncias)
+          required: false
+  
+  - type: textarea
+    id: solucao_detalhada
+    attributes:
+      label: Solução Detalhada
+      description: Descreva a solução técnica proposta
+      placeholder: |
+        1. **Paralelizar writes ClickHouse:**
+           ```yaml
+           output:
+             label: clickhouse_output
+             clickhouse:
+               # ... config ...
+               batching:
+                 count: 1000
+                 period: 5s
+                 processors:
+                   - pool:
+                       cap: 4  # 4 workers paralelos
+           ```
+        
+        2. **Aumentar buffer:**
+           ```yaml
+           buffer:
+             memory:
+               limit: 10000  # de 1000 para 10k mensagens
+           ```
+        
+        3. **Otimizar Bloblang:**
+           - Remover validações redundantes
+           - Usar operadores nativos ao invés de funções customizadas
+    validations:
+      required: true
+  
+  - type: textarea
+    id: metricas_esperadas
+    attributes:
+      label: Métricas Esperadas (Meta)
+      description: Performance esperada após otimização
+      placeholder: |
+        **Throughput target:** 500 msg/s (+ 233%)
+        **Latência p95 target:** < 100ms (- 71%)
+        **Consumer lag target:** < 1000 mensagens (estável)
+        **CPU:** 60-70% (uso eficiente de múltiplos cores)
+        **Memory:** < 1GB
+    validations:
+      required: true
+  
+  - type: textarea
+    id: testes_validacao
+    attributes:
+      label: Testes de Validação
+      description: Como validar a otimização?
+      placeholder: |
+        **Teste de carga:**
+        1. Produzir 1000 msg/s via kafkacat por 10min
+        2. Monitorar métricas no Grafana:
+           - Throughput deve manter 500+ msg/s
+           - Latência p95 deve ficar < 100ms
+           - Consumer lag deve estabilizar (não crescer)
+        3. Verificar CPU/memory no docker stats
+        
+        **Teste de estabilidade:**
+        1. Rodar por 1h com carga real (~200 msg/s)
+        2. Sem crashes ou memory leaks
+        3. Consumer lag deve ser 0 ou próximo de 0
+    validations:
+      required: false
+  
+  - type: textarea
+    id: impacto_downstream
+    attributes:
+      label: Impacto em Sistemas Downstream
+      description: Quais sistemas são afetados?
+      placeholder: |
+        - ClickHouse table ds1.ab_retorno_renavam: + 3x writes/s (validar se aguenta)
+        - Dashboard Grafana: Latência de atualização reduzida
+        - API REST: Dados mais frescos (lag menor)
+    validations:
+      required: false
+  
+  - type: dropdown
+    id: risco
+    attributes:
+      label: Risco da Otimização
+      description: Qual o risco desta mudança?
+      options:
+        - Baixo (config simples, fácil rollback)
+        - Médio (mudança significativa, requer testes)
+        - Alto (impacto em múltiplos sistemas, requer validação extensa)
+    validations:
+      required: true
+  
+  - type: dropdown
+    id: prioridade
+    attributes:
+      label: Prioridade
+      description: Urgência desta otimização
+      options:
+        - baixa (performance aceitável, otimização futura)
+        - média (performance ruim, impacta UX)
+        - alta (performance crítica, consumer lag crescente)
+        - crítica (bloqueante, pipeline não aguenta carga)
+    validations:
+      required: true
+  
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        
+        ## Checklist de Otimização
+        
+        - [ ] Diagnóstico completo (métricas atuais, gargalo identificado)
+        - [ ] Solução proposta (config Bento modificada)
+        - [ ] Teste em dev com carga simulada
+        - [ ] Métricas de validação (throughput, latência, lag)
+        - [ ] Teste de estabilidade (1h+ sem crashes)
+        - [ ] Impacto em downstream verificado (ClickHouse, APIs)
+        - [ ] Dashboard Grafana atualizado (novos painéis se necessário)
+        - [ ] Documentação atualizada (README com novas configs)
+        
+        ## Links Úteis
+        
+        - [Bento Performance](https://warpstreamlabs.github.io/bento/docs/guides/performance_tuning)
+        - [Bento Batching](https://warpstreamlabs.github.io/bento/docs/configuration/batching)
+        - [Kafka Consumer Tuning](https://kafka.apache.org/documentation/#consumerconfigs)
+        - [ClickHouse Async Inserts](https://clickhouse.com/docs/en/optimize/asynchronous-inserts)

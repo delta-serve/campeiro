@@ -1,0 +1,27 @@
+# Configuração geral do Bento
+# Variáveis de ambiente: ${VARIABLE_NAME:default_value}
+
+http:
+  address: ${BENTO_HTTP_ADDRESS:0.0.0.0:8081}
+  enabled: true
+  root_path: /bento
+  debug_endpoints: false
+
+logger:
+  level: ${LOG_LEVEL:INFO}
+  format: json
+  add_timestamp: true
+  static_fields:
+    '@service': bento-streams
+    '@environment': ${APP_ENVIRONMENT:production}
+
+metrics:
+  prometheus:
+    use_histogram_timing: true
+    histogram_buckets: [0.5, 2, 5, 15, 60, 180, 600]
+    add_process_metrics: true
+    add_go_metrics: false
+  mapping: |
+    root = this
+    meta hostname = hostname()
+    meta environment = "${APP_ENVIRONMENT:production}"

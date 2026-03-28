@@ -1,0 +1,271 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "title": "🟢 Status dos Pipelines",
+      "type": "row",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false
+    },
+    {
+      "title": "RENAVAM",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 5, "x": 0, "y": 1 },
+      "targets": [{ "expr": "sum(rate(renavam_messages_master[5m])) > 0 or vector(0)", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "range", "options": { "from": 0.001, "to": 999999, "result": { "text": "ONLINE", "color": "green" } } },
+            { "type": "range", "options": { "from": 0, "to": 0, "result": { "text": "OFFLINE", "color": "red" } } }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 0.001 }] }
+        }
+      },
+      "options": { "colorMode": "background", "graphMode": "none", "textMode": "value" }
+    },
+    {
+      "title": "BCadastros CPF",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 5, "x": 5, "y": 1 },
+      "targets": [{ "expr": "sum(rate(bcpf_messages_received_total[5m])) > 0 or vector(0)", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "range", "options": { "from": 0.001, "to": 999999, "result": { "text": "ONLINE", "color": "green" } } },
+            { "type": "range", "options": { "from": 0, "to": 0, "result": { "text": "OFFLINE", "color": "red" } } }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 0.001 }] }
+        }
+      },
+      "options": { "colorMode": "background", "graphMode": "none", "textMode": "value" }
+    },
+    {
+      "title": "BCadastros CNPJ",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 5, "x": 10, "y": 1 },
+      "targets": [{ "expr": "sum(rate(bcnpj_messages_received_total[5m])) > 0 or vector(0)", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "range", "options": { "from": 0.001, "to": 999999, "result": { "text": "ONLINE", "color": "green" } } },
+            { "type": "range", "options": { "from": 0, "to": 0, "result": { "text": "OFFLINE", "color": "red" } } }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 0.001 }] }
+        }
+      },
+      "options": { "colorMode": "background", "graphMode": "none", "textMode": "value" }
+    },
+    {
+      "title": "CMV Hikvision",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 5, "x": 15, "y": 1 },
+      "targets": [{ "expr": "sum(rate(cmv_hik_messages_received_total[5m])) > 0 or vector(0)", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "range", "options": { "from": 0.001, "to": 999999, "result": { "text": "ONLINE", "color": "green" } } },
+            { "type": "range", "options": { "from": 0, "to": 0, "result": { "text": "OFFLINE", "color": "red" } } }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 0.001 }] }
+        }
+      },
+      "options": { "colorMode": "background", "graphMode": "none", "textMode": "value" }
+    },
+    {
+      "title": "SEFAZ BPE",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
+      "targets": [{ "expr": "sum(rate(bpe_messages_received_total[5m])) > 0 or vector(0)", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "range", "options": { "from": 0.001, "to": 999999, "result": { "text": "ONLINE", "color": "green" } } },
+            { "type": "range", "options": { "from": 0, "to": 0, "result": { "text": "OFFLINE", "color": "red" } } }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 0.001 }] }
+        }
+      },
+      "options": { "colorMode": "background", "graphMode": "none", "textMode": "value" }
+    },
+    {
+      "title": "📊 Tráfego (msgs/s)",
+      "type": "row",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "collapsed": false
+    },
+    {
+      "title": "RENAVAM",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 5, "x": 0, "y": 6 },
+      "targets": [{ "expr": "sum(rate(renavam_messages_master[1m]))", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 1, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] } } },
+      "options": { "graphMode": "area", "colorMode": "value", "textMode": "value" }
+    },
+    {
+      "title": "CPF",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 5, "x": 5, "y": 6 },
+      "targets": [{ "expr": "sum(rate(bcpf_messages_received_total[1m]))", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 1, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] } } },
+      "options": { "graphMode": "area", "colorMode": "value", "textMode": "value" }
+    },
+    {
+      "title": "CNPJ",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 5, "x": 10, "y": 6 },
+      "targets": [{ "expr": "sum(rate(bcnpj_messages_received_total[1m]))", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 1, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] } } },
+      "options": { "graphMode": "area", "colorMode": "value", "textMode": "value" }
+    },
+    {
+      "title": "CMV",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 5, "x": 15, "y": 6 },
+      "targets": [{ "expr": "sum(rate(cmv_hik_messages_received_total[1m]))", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 1, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] } } },
+      "options": { "graphMode": "area", "colorMode": "value", "textMode": "value" }
+    },
+    {
+      "title": "BPE",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 6 },
+      "targets": [{ "expr": "sum(rate(bpe_messages_received_total[1m]))", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 1, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] } } },
+      "options": { "graphMode": "area", "colorMode": "value", "textMode": "value" }
+    },
+    {
+      "title": "📈 Entrada (Mensagens Recebidas)",
+      "type": "row",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 10 },
+      "collapsed": false
+    },
+    {
+      "title": "RENAVAM",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 5, "x": 0, "y": 11 },
+      "targets": [{ "expr": "sum(renavam_messages_master)", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] } } },
+      "options": { "graphMode": "none", "colorMode": "value", "textMode": "value" }
+    },
+    {
+      "title": "CPF",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 5, "x": 5, "y": 11 },
+      "targets": [{ "expr": "sum(bcpf_messages_received_total)", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] } } },
+      "options": { "graphMode": "none", "colorMode": "value", "textMode": "value" }
+    },
+    {
+      "title": "CNPJ",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 5, "x": 10, "y": 11 },
+      "targets": [{ "expr": "sum(bcnpj_messages_received_total)", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] } } },
+      "options": { "graphMode": "none", "colorMode": "value", "textMode": "value" }
+    },
+    {
+      "title": "CMV",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 5, "x": 15, "y": 11 },
+      "targets": [{ "expr": "sum(cmv_hik_messages_received_total)", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] } } },
+      "options": { "graphMode": "none", "colorMode": "value", "textMode": "value" }
+    },
+    {
+      "title": "BPE",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 11 },
+      "targets": [{ "expr": "sum(bpe_messages_received_total)", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] } } },
+      "options": { "graphMode": "none", "colorMode": "value", "textMode": "value" }
+    },
+    {
+      "title": "📤 Saída (Inserts/Output)",
+      "type": "row",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 },
+      "collapsed": false
+    },
+    {
+      "title": "RENAVAM",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 5, "x": 0, "y": 16 },
+      "targets": [{ "expr": "sum(renavam_eventos_raw_sent_total)", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "orange", "value": null }] } } },
+      "options": { "graphMode": "none", "colorMode": "value", "textMode": "value" }
+    },
+    {
+      "title": "CPF",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 5, "x": 5, "y": 16 },
+      "targets": [{ "expr": "sum(bcpf_clickhouse_inserts_total)", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "orange", "value": null }] } } },
+      "options": { "graphMode": "none", "colorMode": "value", "textMode": "value" }
+    },
+    {
+      "title": "CNPJ",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 5, "x": 10, "y": 16 },
+      "targets": [{
+        "expr": "sum(bcnpj_matriz_inserts_total) + sum(bcnpj_socios_inserts_total) + sum(bcnpj_estabelecimento_inserts_total) + sum(bcnpj_sucessao_inserts_total) + sum(bcnpj_desconhecido_inserts_total)",
+        "refId": "A"
+      }],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "orange", "value": null }] } } },
+      "options": { "graphMode": "none", "colorMode": "value", "textMode": "value" }
+    },
+    {
+      "title": "CMV",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 5, "x": 15, "y": 16 },
+      "targets": [{ "expr": "sum(cmv_hik_kafka_output_total)", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "orange", "value": null }] } } },
+      "options": { "graphMode": "none", "colorMode": "value", "textMode": "value" }
+    },
+    {
+      "title": "BPE",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 16 },
+      "targets": [{ "expr": "sum(bpe_clickhouse_inserts_total)", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "orange", "value": null }] } } },
+      "options": { "graphMode": "none", "colorMode": "value", "textMode": "value" }
+    },
+    {
+      "title": "📉 Tráfego Comparativo (histórico)",
+      "type": "row",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 20 },
+      "collapsed": false
+    },
+    {
+      "title": "Mensagens Recebidas/s — Todos os Pipelines",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 21 },
+      "targets": [
+        { "expr": "sum(rate(renavam_messages_master[1m]))", "legendFormat": "RENAVAM", "refId": "A" },
+        { "expr": "sum(rate(bcpf_messages_received_total[1m]))", "legendFormat": "CPF", "refId": "B" },
+        { "expr": "sum(rate(bcnpj_messages_received_total[1m]))", "legendFormat": "CNPJ", "refId": "C" },
+        { "expr": "sum(rate(cmv_hik_messages_received_total[1m]))", "legendFormat": "CMV Hikvision", "refId": "D" },
+        { "expr": "sum(rate(bpe_messages_received_total[1m]))", "legendFormat": "SEFAZ BPE", "refId": "E" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "msg/s",
+          "custom": { "lineWidth": 2, "fillOpacity": 15, "showPoints": "never" }
+        }
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "min", "max", "mean"] }
+      }
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 38,
+  "tags": ["benthos", "bento", "streams", "overview"],
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": { "refresh_intervals": ["5s", "10s", "30s", "1m", "5m"] },
+  "title": "Bento Streams - Overview",
+  "uid": "overview_dashboard",
+  "version": 1
+}

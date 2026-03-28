@@ -1,0 +1,46 @@
+[Unit]
+Description=Bento Stream Processor (Streams Mode)
+Documentation=https://warpstreamlabs.github.io/bento/
+After=network-online.target redis.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bento
+Group=bento
+
+# Diretório de trabalho = repositório Git
+WorkingDirectory=PROJECT_PATH
+
+# Carregar variáveis de ambiente
+EnvironmentFile=-PROJECT_PATH/config/.env
+
+# Executar Bento com caminhos relativos
+ExecStart=/usr/local/bin/bento \
+  --env-file config/.env \
+  -c config/service.yaml \
+  -r config/resources/*.yaml \
+  streams streams/*.yaml
+# Restart automático
+Restart=always
+RestartSec=10s
+
+# Timeouts
+TimeoutStartSec=60s
+TimeoutStopSec=30s
+
+# Limites de recursos
+LimitNOFILE=65536
+LimitNPROC=4096
+
+# Logs
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bento
+
+# Segurança
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

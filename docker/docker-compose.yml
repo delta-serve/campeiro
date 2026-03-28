@@ -1,0 +1,81 @@
+services:
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v23.2.19
+    container_name: redpanda
+    command:
+      - redpanda
+      - start
+      - --smp
+      - '1'
+      - --reserve-memory
+      - 0M
+      - --overprovisioned
+      - --node-id
+      - '0'
+      - --kafka-addr
+      - PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092
+      - --advertise-kafka-addr
+      - PLAINTEXT://redpanda:29092,OUTSIDE://localhost:9092
+      - --pandaproxy-addr
+      - PLAINTEXT://0.0.0.0:28082,OUTSIDE://0.0.0.0:8082
+      - --advertise-pandaproxy-addr
+      - PLAINTEXT://redpanda:28082,OUTSIDE://localhost:9083
+    ports:
+      - 9081:8081
+      - 9083:8082
+      - 9092:9092
+      - 28082:28082
+      - 29092:29092
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
+    networks:
+      - redpanda_network
+
+  redpanda-console:
+    image: docker.redpanda.com/redpandadata/console:v2.3.1
+    container_name: redpanda-console
+    entrypoint: /app/console
+    environment:
+      KAFKA_BROKERS: redpanda:29092
+    ports:
+      - 9084:8080
+    depends_on:
+      - redpanda
+    networks:
+      - redpanda_network
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - 9190:9090
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - redpanda_network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - 9001:3000
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+    networks:
+      - redpanda_network
+
+volumes:
+  redpanda-data:
+
+networks:
+  redpanda_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.200.200.0/24

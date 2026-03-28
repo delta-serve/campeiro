@@ -1,0 +1,265 @@
+name: 🔄 Novo Pipeline Bento
+description: Criar novo pipeline Bento (input, processors, output)
+title: "[Pipeline] <nome_pipeline> - <Descrição curta>"
+labels: ["tipo:pipeline"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Template para Novo Pipeline Bento
+        
+        Use este template para criar pipelines de stream processing com Bento (Redpanda Connect) + Bloblang.
+        
+        ---
+  
+  - type: textarea
+    id: contexto
+    attributes:
+      label: Contexto
+      description: Descrição do pipeline e caso de uso
+      placeholder: |
+        Pipeline para ingestão de retornos RENAVAM do Alerta-Brasil.
+        Consome mensagens Kafka, valida schema, transforma via Bloblang
+        e insere no ClickHouse para analytics.
+    validations:
+      required: true
+  
+  - type: dropdown
+    id: tipo_input
+    attributes:
+      label: Tipo de Input
+      description: Qual a fonte de dados?
+      options:
+        - Kafka consumer
+        - HTTP server
+        - File (JSON, CSV, Parquet)
+        - WebSocket
+        - MQTT
+        - Outro (especificar na descrição)
+    validations:
+      required: true
+  
+  - type: input
+    id: input_detalhe
+    attributes:
+      label: Detalhes do Input
+      description: Topic Kafka, endpoint HTTP, caminho do arquivo, etc.
+      placeholder: "Ex: Kafka topic 'ab.retorno.renavam', consumer group 'bento-ab-retorno'"
+    validations:
+      required: true
+  
+  - type: checkboxes
+    id: processamento
+    attributes:
+      label: Processamento
+      description: Marque os processadores a serem aplicados
+      options:
+        - label: Bloblang mapping (transformação de schema)
+          required: false
+        - label: Schema validation (JSON Schema, Avro)
+          required: false
+        - label: Enriquecimento (lookup em database, API externa)
+          required: false
+        - label: Filtro (condições para processar/descartar mensagens)
+          required: false
+        - label: Agregação (window, group by)
+          required: false
+        - label: Deduplicação (cache, key tracking)
+          required: false
+  
+  - type: textarea
+    id: bloblang_preview
+    attributes:
+      label: Bloblang Mapping (Preview)
+      description: Se aplicável, cole um preview do mapeamento Bloblang
+      placeholder: |
+        ```coffee
+        # Transforma JSON AB Retorno para schema ClickHouse
+        root.placa = this.dados.placa.uppercase()
+        root.renavam = this.dados.renavam.string()
+        root.chassi = this.dados.chassi
+        root.data_retorno = this.timestamp.ts_parse("2006-01-02T15:04:05Z")
+        root.status = this.dados.status.or("PENDENTE")
+        
+        # Validação
+        root = if this.dados.placa.length() != 7 {
+          throw("Placa inválida: %s".format(this.dados.placa))
+        }
+        ```
+      render: coffee
+    validations:
+      required: false
+  
+  - type: dropdown
+    id: tipo_output
+    attributes:
+      label: Tipo de Output
+      description: Qual o destino dos dados processados?
+      options:
+        - ClickHouse table
+        - Kafka producer
+        - HTTP client (webhook)
+        - File (JSON, CSV, Parquet)
+        - PostgreSQL
+        - Outro (especificar na descrição)
+    validations:
+      required: true
+  
+  - type: input
+    id: output_detalhe
+    attributes:
+      label: Detalhes do Output
+      description: Tabela ClickHouse, topic Kafka, endpoint HTTP, etc.
+      placeholder: "Ex: ClickHouse table 'ds1.ab_retorno_renavam'"
+    validations:
+      required: true
+  
+  - type: checkboxes
+    id: tratamento_erros
+    attributes:
+      label: Tratamento de Erros
+      description: Marque as estratégias de error handling
+      options:
+        - label: DLQ (Dead Letter Queue) - mensagens com erro para topic separado
+          required: false
+        - label: Retry policy - tentativas automáticas com backoff
+          required: false
+        - label: Fallback output - output alternativo em caso de falha
+          required: false
+        - label: Logging estruturado - logs detalhados de erros
+          required: false
+  
+  - type: textarea
+    id: metricas
+    attributes:
+      label: Métricas e Monitoramento
+      description: Quais métricas devem ser expostas?
+      placeholder: |
+        **Métricas Prometheus (/metrics):**
+        - bento_input_received (total mensagens recebidas)
+        - bento_processor_error (total erros processamento)
+        - bento_output_sent (total mensagens enviadas ao output)
+        - bento_output_error (total erros no output)
+        
+        **Dashboard Grafana:**
+        - Throughput (msg/s)
+        - Latência p50, p95, p99
+        - Taxa de erro (%)
+        - Consumer lag (se Kafka)
+    validations:
+      required: false
+  
+  - type: textarea
+    id: dashboard_grafana
+    attributes:
+      label: Dashboard Grafana
+      description: Quais painéis devem ser criados?
+      placeholder: |
+        **Painéis principais:**
+        1. Throughput (msg/s) - gráfico de linha, últimas 6h
+        2. Latência (ms) - p50, p95, p99, últimas 6h
+        3. Taxa de erro (%) - gráfico de área, últimas 6h
+        4. Consumer lag (se Kafka) - gauge, valor atual
+        5. Erros recentes - tabela, últimos 50 erros
+        
+        **Arquivo:** docker/grafana/provisioning/dashboards/02_renavam.json
+    validations:
+      required: false
+  
+  - type: checkboxes
+    id: checklist_tecnico
+    attributes:
+      label: Checklist Técnico
+      description: Itens obrigatórios para aprovação do pipeline
+      options:
+        - label: Configuração Bento (bento/<nome>.yaml)
+          required: false
+        - label: Mapeamento Bloblang (bloblang/<nome>.blobl) se aplicável
+          required: false
+        - label: Schema validation (input e output)
+          required: false
+        - label: Tratamento de erros (DLQ, retry)
+          required: false
+        - label: Métricas Prometheus expostas (/metrics)
+          required: false
+        - label: Dashboard Grafana criado (provisioning/dashboards/)
+          required: false
+        - label: Testes de carga (throughput, latência)
+          required: false
+        - label: Documentação (README atualizado)
+          required: false
+  
+  - type: textarea
+    id: testes_carga
+    attributes:
+      label: Testes de Carga
+      description: Metas de performance
+      placeholder: |
+        **Throughput target:** 500 msg/s
+        **Latência p95:** < 100ms
+        **Consumer lag:** < 1000 mensagens (estável)
+        **Teste:** k6 ou kafkacat produzindo 1000 msg/s por 5min
+    validations:
+      required: false
+  
+  - type: input
+    id: batch_size
+    attributes:
+      label: Batch Size (se aplicável)
+      description: Quantas mensagens processar em lote?
+      placeholder: "Ex: 1000 mensagens ou 5s (o que ocorrer primeiro)"
+    validations:
+      required: false
+  
+  - type: dropdown
+    id: estimativa
+    attributes:
+      label: Estimativa de Esforço
+      description: Complexidade estimada
+      options:
+        - XS (< 4h - pipeline simples)
+        - S (4-8h - pipeline com Bloblang básico)
+        - M (1-2 dias - pipeline complexo + dashboard)
+        - L (3-5 dias - pipeline com múltiplos outputs/enriquecimento)
+        - XL (> 1 semana - refactoring grande)
+    validations:
+      required: true
+  
+  - type: dropdown
+    id: prioridade
+    attributes:
+      label: Prioridade
+      description: Urgência desta task
+      options:
+        - baixa (backlog)
+        - média (próxima fase)
+        - alta (urgente - próximos dias)
+        - crítica (bloqueante - hoje)
+    validations:
+      required: true
+  
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        
+        ## Entregáveis Esperados
+        
+        - `bento/<nome_pipeline>.yaml` (configuração Bento)
+        - `bloblang/<nome_mapping>.blobl` (se aplicável)
+        - `docker/grafana/provisioning/dashboards/<nome>.json` (dashboard Grafana)
+        - `docker-compose.yml` override (se necessário novo serviço)
+        - Testes de carga (resultados documentados)
+        
+        ## Convenções de Nomenclatura
+        
+        - **Pipeline**: `<dominio>_<acao>_<destino>.yaml` (ex: `ab_retorno_renavam.yaml`)
+        - **Bloblang**: `<dominio>_<acao>_transform.blobl` (ex: `ab_retorno_transform.blobl`)
+        - **Dashboard**: `<numero>_<nome>.json` (ex: `02_renavam.json`)
+        
+        ## Links Úteis
+        
+        - [Bento Docs](https://warpstreamlabs.github.io/bento/docs/about)
+        - [Bloblang Guide](https://warpstreamlabs.github.io/bento/docs/guides/bloblang/about)
+        - [Grafana Dashboards](https://grafana.com/docs/grafana/latest/dashboards/)

@@ -1,0 +1,775 @@
+# Fluxo de ingestão de dados da RFB - Cadastro Nacional da Pessoa Jurídica (CNPJ)
+input:
+  generate:
+    interval: "10s"
+    mapping: |
+      root = ""
+
+pipeline:
+  processors:
+    # === ADAPTIVE POLLING: Lê estado do backoff ===
+    - cache:
+        resource: redis
+        operator: get
+        key: "bcnpj_backoff_until"
+    - mapping: meta backoff_until = if errored() { 0 } else { content().or("0").string().number().catch(0) }
+    - cache:
+        resource: redis
+        operator: get
+        key: "bcnpj_backoff_secs"
+    - mapping: meta backoff_secs = if errored() { 0 } else { content().or("0").string().number().catch(0) }
+
+    # Skip se estamos em período de backoff (evita request ao CouchDB)
+    - bloblang: |
+        root = if @backoff_until > 0 && timestamp_unix() < @backoff_until {
+          deleted()
+        } else {
+          ""
+        }
+
+    - log:
+        level: DEBUG
+        message: "Polling ativo (backoff_secs=${! @backoff_secs })"
+
+    - cache:
+        resource: redis
+        operator: get
+        key: "seq_bcnpj"
+    - mapping: meta last_seq_redis = if errored()  { "0" } else { content().string() }
+    - log:
+        level: DEBUG
+        message: "Valor lido do Redis: ${! @last_seq_redis.string().slice(0, 15) }"
+    - log:
+        level: DEBUG
+        message: "Iniciando busca com última sequência: ${! @last_seq_redis.string().slice(0, 15) }"
+      label: "bcnpj_pipeline_http_request"
+
+    # Captura timestamp antes do request ao CouchDB
+    - bloblang: 'meta request_start = timestamp_unix_nano()'
+
+    - http:
+        url: "${COUCHDB_URL}/${COUCHDB_DB_CNPJ}/_changes?include_docs=true&since=${! @last_seq_redis.string() }&limit=${COUCHDB_DB_CNPJ_LIMIT}"
+        verb: GET
+        headers:
+          Accept: "application/json"
+        timeout: "45s"
+        retry_period: "7s"
+        max_retry_backoff: "300s"
+
+    # Calcula duração do request em milissegundos
+    - bloblang: 'meta request_duration_ms = (timestamp_unix_nano() - @request_start) / 1000000'
+
+    - log:
+        level: INFO
+        message: "CouchDB request levou ${! @request_duration_ms }ms (limit=${COUCHDB_DB_CNPJ_LIMIT})"
+
+    - bloblang: |
+        # Parseia a resposta JSON com fallback para estrutura vazia
+        root = content().parse_json().catch({"results": [], "last_seq": @last_seq_redis})
+        meta new_last_seq = this.last_seq.or(@last_seq_redis)
+        meta msgs_processadas = this.results.length().catch(0)
+
+
+        # Processa cada item do array results se existir
+        root = if this.results.type() == "array" && this.results.length() > 0 {
+          this.results.map_each(item -> item)
+        } else {
+          # Retorna array vazio para permitir atualização do backoff
+          []
+        }
+
+    - log:
+        level: INFO
+        message: "Nova última sequência: ${! @new_last_seq.string().slice(0, 15) }, mensagens: ${! @msgs_processadas }, request: ${! @request_duration_ms }ms"
+
+    # Métrica: Duração do request ao CouchDB (milissegundos)
+    - metric:
+        type: gauge
+        name: bcnpj_couchdb_request_duration_ms
+        value: ${! @request_duration_ms }
+
+    # Métrica: Total de mensagens recebidas do CouchDB
+    - metric:
+        type: counter_by
+        name: bcnpj_messages_received_total
+        value: ${! @msgs_processadas }
+
+    # Métrica: Throughput atual (mensagens por ciclo)
+    - metric:
+        type: gauge
+        name: bcnpj_messages_per_cycle
+        value: ${! @msgs_processadas }
+
+    - switch:
+        - check: 'this.type() == "array" && this.length() == 0'
+          processors:
+            # === ADAPTIVE POLLING: Incrementa backoff quando sem dados ===
+            - bloblang: |
+                let current = @backoff_secs.or(0)
+                let doubled = $current * 2
+                meta new_backoff_secs = if $current == 0 { 20 } else if $doubled > 3600 { 3600 } else { $doubled }
+                meta new_backoff_until = timestamp_unix() + @new_backoff_secs
+            - cache:
+                resource: redis
+                operator: set
+                key: "bcnpj_backoff_secs"
+                value: '${! @new_backoff_secs.number().catch(0) }'
+            - cache:
+                resource: redis
+                operator: set
+                key: "bcnpj_backoff_until"
+                value: '${! @new_backoff_until.number().catch(0) }'
+            - log:
+                level: INFO
+                message: 'Adaptive polling: sem dados, próximo poll em ${! @new_backoff_secs.number().catch(0) }s'
+            - metric:
+                type: gauge
+                name: bcnpj_adaptive_backoff_secs
+                value: ${! @new_backoff_secs.number().catch(0) }
+            - bloblang: |
+                root = deleted()
+
+        - check: 'this.type() == "array" && this.length() > 0'
+          processors:
+            # === ADAPTIVE POLLING: Reseta backoff quando há dados (antes do unarchive, executa 1x) ===
+            - cache:
+                resource: redis
+                operator: set
+                key: "bcnpj_backoff_secs"
+                value: "0"
+            - cache:
+                resource: redis
+                operator: set
+                key: "bcnpj_backoff_until"
+                value: "0"
+            - log:
+                level: INFO
+                message: 'Adaptive polling: dados encontrados (${! @msgs_processadas } msgs), intervalo resetado para 10s'
+
+            - unarchive:
+                format: json_array
+
+            - log:
+                level: DEBUG
+                message: 'Processando item com ID: ${! json("id") }'
+
+            - bloblang: |
+                # Processa cada change individual - estrutura completa para ClickHouse
+                meta item_seq = this.seq
+                doc = this.doc
+
+                # Mapeamento dos campos por tipo
+
+                root = if doc.cnpjSucedida != null {
+                  {
+                    "_id": this.id,
+                    "deleted": this.deleted.or(false),
+                    "seq": this.seq,
+                    "rev": doc._rev.split("-").index(0).catch("0").number().catch(0),
+                    "tipo_doc": "sucessao",
+                    "cnpjSucedida": doc.cnpjSucedida.or(""),
+                    "id": doc.id.or(""),
+                    "sucessoes": doc.sucessoes.or([]).string(),
+                  }
+                } else if doc.cnpj != null && doc.cnpj.length() == 8 {
+                  {
+                    "_id": this.id,
+                    "deleted": this.deleted.or(false),
+                    "seq": this.seq,
+                    "rev": doc._rev.split("-").index(0).catch("0").number().catch(0),
+                    "tipo_doc": "matriz",
+                    "capitalSocial": doc.capitalSocial.or(""),
+                    "cnpj": doc.cnpj.or(""),
+                    "cpfResponsavel": doc.cpfResponsavel.or(""),
+                    "dataInclusaoResponsavel": doc.dataInclusaoResponsavel.or(""),
+                    "enteFederativo": doc.enteFederativo.or(""),
+                    "naturezaJuridica": doc.naturezaJuridica.or(""),
+                    "nomeEmpresarial": doc.nomeEmpresarial.or(""),
+                    "porteEmpresa": doc.porteEmpresa.or(""),
+                    "qualificacaoResponsavel": doc.qualificacaoResponsavel.or(""),
+                    "socios": doc.socios.or([]),
+                  }
+                } else if doc.cnpj != null && doc.cnpj.length() == 14 {
+                  {
+                    "_id": this.id,
+                    "deleted": this.deleted.or(false),
+                    "seq": this.seq,
+                    "rev": doc._rev.split("-").index(0).catch("0").number().catch(0),
+                    "tipo_doc": "estabelecimento",
+                    "cnpj": doc.cnpj.or(""),
+                    "indicadorMatriz": doc.indicadorMatriz.or(""),
+                    "nomeFantasia": doc.nomeFantasia.or(""),
+                    "situacaoCadastral": doc.situacaoCadastral.or(""),
+                    "motivoSituacao": doc.motivoSituacao.or(""),
+                    "dataSituacaoCadastral": doc.dataSituacaoCadastral.or(""),
+                    "nomeCidadeExterior": doc.nomeCidadeExterior.or(""),
+                    "codigoPais": doc.codigoPais.or(""),
+                    "dataInicioAtividade": doc.dataInicioAtividade.or(""),
+                    "cnaeFiscal": doc.cnaeFiscal.or(""),
+                    "cnaeSecundarias": doc.cnaeSecundarias.or([]).string(),
+                    "tipoLogradouro": doc.tipoLogradouro.or(""),
+                    "logradouro": doc.logradouro.or(""),
+                    "numero": doc.numero.or(""),
+                    "complemento": doc.complemento.or(""),
+                    "bairro": doc.bairro.or(""),
+                    "cep": doc.cep.or(""),
+                    "uf": doc.uf.or(""),
+                    "codigoMunicipio": doc.codigoMunicipio.or(""),
+                    "dddTelefone1": doc.dddTelefone1.or(""),
+                    "telefone1": doc.telefone1.or(""),
+                    "dddTelefone2": doc.dddTelefone2.or(""),
+                    "telefone2": doc.telefone2.or(""),
+                    "email": doc.email.or(""),
+                    "situacaoEspecial": doc.situacaoEspecial.or(""),
+                    "dataSituacaoEspecial": doc.dataSituacaoEspecial.or(""),
+                    "tipoOrgaoRegistro": doc.tipoOrgaoRegistro.or(""),
+                    "tiposUnidade": doc.tiposUnidade.or([]).string(),
+                    "formasAtuacao": doc.formasAtuacao.or([]).string(),
+                    "contadorPF": doc.contadorPF.or(""),
+                    "contadorPJ": doc.contadorPJ.or(""),
+                  }
+                } else {
+                  {
+                    "_id": this.id,
+                    "deleted": this.deleted.or(false),
+                    "seq": this.seq,
+                    "rev": doc._rev.split("-").index(0).catch("0").number().catch(0),
+                    "tipo_doc": "desconhecido",
+                    "doc": doc,
+                  }
+                }
+                root.timestamp_received = timestamp_unix()
+
+output:
+  label: bcnpj_output
+  broker:
+    pattern: fan_out_sequential
+    outputs:
+      - switch:
+          cases:
+            - check: this.tipo_doc == "matriz"
+              output:
+                broker:
+                  outputs:
+                    - processors:
+                        - log:
+                            level: DEBUG
+                            message: 'Inserindo matriz CNPJ ${! json("cnpj") } no ClickHouse'
+                        - bloblang: |
+                            root = {
+                              "_id": this._id,
+                              "deleted": this.deleted,
+                              "seq": this.seq.string(),
+                              "rev": this.rev,
+                              "capitalSocial": this.capitalSocial.or(""),
+                              "cnpj": this.cnpj.or(""),
+                              "cpfResponsavel": this.cpfResponsavel.or(""),
+                              "dataInclusaoResponsavel": this.dataInclusaoResponsavel.or(""),
+                              "enteFederativo": this.enteFederativo.or(""),
+                              "naturezaJuridica": this.naturezaJuridica.or(""),
+                              "nomeEmpresarial": this.nomeEmpresarial.or(""),
+                              "porteEmpresa": this.porteEmpresa.or(""),
+                              "qualificacaoResponsavel": this.qualificacaoResponsavel.or(""),
+                              "timestamp_received": this.timestamp_received
+                            }
+                        - metric:
+                            type: counter
+                            name: bcnpj_matriz_inserts_total
+                            value: "1"
+                      label: "bcnpj_sql_insert_matriz"
+                      sql_insert:
+                        driver: clickhouse
+                        dsn: "clickhouse://${CLICKHOUSE_USER}:${CLICKHOUSE_PASSWORD}@${CLICKHOUSE_HOST}:${CLICKHOUSE_PORT}"
+                        conn_max_idle: ${CLICKHOUSE_MAX_IDLE_CONNS:1}
+                        conn_max_open: ${CLICKHOUSE_MAX_OPEN_CONNS:1}
+                        max_in_flight: 1
+                        table: ${BCADASTROS_CNPJ_MATRIZ_HISTORICO}
+                        init_statement: |
+                          CREATE TABLE IF NOT EXISTS ${BCADASTROS_CNPJ_MATRIZ_HISTORICO}
+                          (
+                            _id String,
+                            deleted Bool,
+                            seq String,
+                            rev UInt16,
+                            capitalSocial String,
+                            cnpj String,
+                            cpfResponsavel String,
+                            dataInclusaoResponsavel String,
+                            enteFederativo String,
+                            naturezaJuridica String,
+                            nomeEmpresarial String,
+                            porteEmpresa String,
+                            qualificacaoResponsavel String,
+                            timestamp_received DateTime,
+
+                            -- ÍNDICES
+                            INDEX idx_ts_received timestamp_received TYPE minmax GRANULARITY 4
+                          )
+                          ENGINE = ReplacingMergeTree(timestamp_received)
+                          ORDER BY (cnpj, rev)
+                          PARTITION BY toYYYYMM(timestamp_received)
+                          SETTINGS storage_policy = 'ds3_cold', index_granularity = 8192;
+                        columns:
+                          - _id
+                          - deleted
+                          - seq
+                          - rev
+                          - capitalSocial
+                          - cnpj
+                          - cpfResponsavel
+                          - dataInclusaoResponsavel
+                          - enteFederativo
+                          - naturezaJuridica
+                          - nomeEmpresarial
+                          - porteEmpresa
+                          - qualificacaoResponsavel
+                          - timestamp_received
+                        args_mapping: |
+                          [
+                            this._id,
+                            this.deleted,
+                            this.seq,
+                            this.rev,
+                            this.capitalSocial,
+                            this.cnpj,
+                            this.cpfResponsavel,
+                            this.dataInclusaoResponsavel,
+                            this.enteFederativo,
+                            this.naturezaJuridica,
+                            this.nomeEmpresarial,
+                            this.porteEmpresa,
+                            this.qualificacaoResponsavel,
+                            this.timestamp_received
+                          ]
+                        batching:
+                          count: ${COUCHDB_DB_CNPJ_LIMIT}
+                          period: 12s
+                    - processors:
+                        - log:
+                            level: DEBUG
+                            message: 'Inserindo sócios do CNPJ ${! json("cnpj") } no ClickHouse'
+                        - bloblang: |
+                            # Explode a lista de sócios em eventos individuais
+                            root = this.socios.map_each(socio -> {
+                              "_id": this._id,
+                              "deleted": this.deleted,
+                              "seq": this.seq,
+                              "rev": this.rev,
+                              "cnpj": this.cnpj,
+                              "cnpjCpfSocio": socio.cpfCnpj.or("") ,
+                              "qualificacaoSocio": socio.qualificacaoSocio.or("") ,
+                              "dataEntrada": socio.dataEntrada.or("") ,
+                              "representanteLegal": socio.cpfRepresentanteLegal.or("") ,
+                              "qualificacaoRepresentanteLegal": socio.qualificacaoRepresentanteLegal.or("") ,
+                              "nomeSocioEstrangeiro": socio.nomeSocioEstrangeiro.or("") ,
+                              "tipo": socio.tipo.or("") ,
+                              "pais": socio.codigoPais.or("") ,
+                              "timestamp_received": this.timestamp_received
+                            })
+                        - unarchive:
+                            format: json_array
+                        - metric:
+                            type: counter
+                            name: bcnpj_socios_inserts_total
+                            value: "1"
+                      label: "bcnpj_sql_insert_socios"
+                      sql_insert:
+                        driver: clickhouse
+                        dsn: "clickhouse://${CLICKHOUSE_USER}:${CLICKHOUSE_PASSWORD}@${CLICKHOUSE_HOST}:${CLICKHOUSE_PORT}"
+                        conn_max_idle: ${CLICKHOUSE_MAX_IDLE_CONNS:1}
+                        conn_max_open: ${CLICKHOUSE_MAX_OPEN_CONNS:1}
+                        max_in_flight: 1
+                        table: ${BCADASTROS_CNPJ_MATRIZ_SOCIOS_HISTORICO}
+                        init_statement: |
+                          CREATE TABLE IF NOT EXISTS ${BCADASTROS_CNPJ_MATRIZ_SOCIOS_HISTORICO}
+                          (
+                            _id String,
+                            seq String,
+                            rev UInt16,
+                            cnpj String,
+                            cnpjCpfSocio String,
+                            qualificacaoSocio String,
+                            dataEntrada String,
+                            representanteLegal String,
+                            qualificacaoRepresentanteLegal String,
+                            nomeSocioEstrangeiro String,
+                            tipo String,
+                            pais String,
+                            timestamp_received DateTime,
+
+                            -- ÍNDICES
+                            INDEX idx_ts_received timestamp_received TYPE minmax GRANULARITY 4
+                          )
+                          ENGINE = ReplacingMergeTree(timestamp_received)
+                          ORDER BY (cnpj, cnpjCpfSocio, rev)
+                          PARTITION BY toYYYYMM(timestamp_received)
+                          SETTINGS storage_policy = 'ds3_cold',
+                           index_granularity = 8192;
+                        columns:
+                          - _id
+                          - seq
+                          - rev
+                          - cnpj
+                          - cnpjCpfSocio
+                          - qualificacaoSocio
+                          - dataEntrada
+                          - representanteLegal
+                          - qualificacaoRepresentanteLegal
+                          - nomeSocioEstrangeiro
+                          - tipo
+                          - pais
+                          - timestamp_received
+                        args_mapping: |
+                          [
+                            this._id,
+                            this.seq,
+                            this.rev,
+                            this.cnpj,
+                            this.cnpjCpfSocio,
+                            this.qualificacaoSocio,
+                            this.dataEntrada,
+                            this.representanteLegal,
+                            this.qualificacaoRepresentanteLegal,
+                            this.nomeSocioEstrangeiro,
+                            this.tipo,
+                            this.pais,
+                            this.timestamp_received
+                          ]
+                        batching:
+                          count: ${COUCHDB_DB_CNPJ_LIMIT}
+                          period: 10s
+            - check: this.tipo_doc == "estabelecimento"
+              output:
+                label: "bcnpj_sql_insert_estabelecimento"
+                processors:
+                  - log:
+                      level: DEBUG
+                      message: 'Inserindo estabelecimento CNPJ ${! json("cnpj") } no ClickHouse'
+                  - metric:
+                      type: counter
+                      name: bcnpj_estabelecimento_inserts_total
+                      value: "1"
+                sql_insert:
+                  driver: clickhouse
+                  dsn: "clickhouse://${CLICKHOUSE_USER}:${CLICKHOUSE_PASSWORD}@${CLICKHOUSE_HOST}:${CLICKHOUSE_PORT}"
+                  conn_max_idle: ${CLICKHOUSE_MAX_IDLE_CONNS:1}
+                  conn_max_open: ${CLICKHOUSE_MAX_OPEN_CONNS:1}
+                  max_in_flight: 1
+                  table: ${BCADASTROS_CNPJ_ESTABELECIMENTO_HISTORICO}
+                  init_statement: |
+                    CREATE TABLE IF NOT EXISTS ${BCADASTROS_CNPJ_ESTABELECIMENTO_HISTORICO}
+                    (
+                      _id String,
+                      deleted Bool,
+                      cnpj String,
+                      seq String,
+                      rev UInt16,
+                      indicadorMatriz String,
+                      nomeFantasia String,
+                      situacaoCadastral String,
+                      motivoSituacao String,
+                      dataSituacaoCadastral String,
+                      nomeCidadeExterior String,
+                      codigoPais String,
+                      dataInicioAtividade String,
+                      cnaeFiscal String,
+                      cnaeSecundarias String,
+                      tipoLogradouro String,
+                      logradouro String,
+                      numero String,
+                      complemento String,
+                      bairro String,
+                      cep String,
+                      uf String,
+                      codigoMunicipio String,
+                      dddTelefone1 String,
+                      telefone1 String,
+                      dddTelefone2 String,
+                      telefone2 String,
+                      email String,
+                      situacaoEspecial String,
+                      dataSituacaoEspecial String,
+                      tipoOrgaoRegistro String,
+                      tiposUnidade String,
+                      formasAtuacao String,
+                      tipoCrcContadorPF String,
+                      classificacaoCrcContadorPF String,
+                      sequencialCrcContadorPF String,
+                      UfCrcContadorPF String,
+                      contadorPF String,
+                      tipoCrcContadorPJ String,
+                      classificacaoCrcContadorPJ String,
+                      sequencialCrcContadorPJ String,
+                      UfCrcContadorPJ String,
+                      contadorPJ String,
+                      nire String,
+                      timestamp_received DateTime,
+
+                      -- ÍNDICES
+                      INDEX idx_ts_received timestamp_received TYPE minmax GRANULARITY 4
+                    )
+                    ENGINE = ReplacingMergeTree(timestamp_received)
+                    ORDER BY (cnpj, rev)
+                    PARTITION BY toYYYYMM(timestamp_received)
+                    SETTINGS storage_policy = 'ds3_cold',
+                     index_granularity = 8192;
+                  columns:
+                    - _id
+                    - deleted
+                    - cnpj
+                    - seq
+                    - rev
+                    - indicadorMatriz
+                    - nomeFantasia
+                    - situacaoCadastral
+                    - motivoSituacao
+                    - dataSituacaoCadastral
+                    - nomeCidadeExterior
+                    - codigoPais
+                    - dataInicioAtividade
+                    - cnaeFiscal
+                    - cnaeSecundarias
+                    - tipoLogradouro
+                    - logradouro
+                    - numero
+                    - complemento
+                    - bairro
+                    - cep
+                    - uf
+                    - codigoMunicipio
+                    - dddTelefone1
+                    - telefone1
+                    - dddTelefone2
+                    - telefone2
+                    - email
+                    - situacaoEspecial
+                    - dataSituacaoEspecial
+                    - tipoOrgaoRegistro
+                    - tiposUnidade
+                    - formasAtuacao
+                    - tipoCrcContadorPF
+                    - classificacaoCrcContadorPF
+                    - sequencialCrcContadorPF
+                    - UfCrcContadorPF
+                    - contadorPF
+                    - tipoCrcContadorPJ
+                    - classificacaoCrcContadorPJ
+                    - sequencialCrcContadorPJ
+                    - UfCrcContadorPJ
+                    - contadorPJ
+                    - nire
+                    - timestamp_received
+                  args_mapping: |
+                    [
+                      this._id,
+                      this.deleted,
+                      this.cnpj,
+                      this.seq,
+                      this.rev,
+                      this.indicadorMatriz,
+                      this.nomeFantasia,
+                      this.situacaoCadastral,
+                      this.motivoSituacao,
+                      this.dataSituacaoCadastral,
+                      this.nomeCidadeExterior,
+                      this.codigoPais,
+                      this.dataInicioAtividade,
+                      this.cnaeFiscal,
+                      this.cnaeSecundarias,
+                      this.tipoLogradouro,
+                      this.logradouro,
+                      this.numero,
+                      this.complemento,
+                      this.bairro,
+                      this.cep,
+                      this.uf,
+                      this.codigoMunicipio,
+                      this.dddTelefone1,
+                      this.telefone1,
+                      this.dddTelefone2,
+                      this.telefone2,
+                      this.email,
+                      this.situacaoEspecial,
+                      this.dataSituacaoEspecial,
+                      this.tipoOrgaoRegistro,
+                      this.tiposUnidade,
+                      this.formasAtuacao,
+                      this.tipoCrcContadorPF,
+                      this.classificacaoCrcContadorPF,
+                      this.sequencialCrcContadorPF,
+                      this.UfCrcContadorPF,
+                      this.contadorPF,
+                      this.tipoCrcContadorPJ,
+                      this.classificacaoCrcContadorPJ,
+                      this.sequencialCrcContadorPJ,
+                      this.UfCrcContadorPJ,
+                      this.contadorPJ,
+                      this.nire,
+                      this.timestamp_received
+                    ]
+                  batching:
+                    count: ${COUCHDB_DB_CNPJ_LIMIT}
+                    period: 10s
+            - check: this.tipo_doc == "sucessao"
+              output:
+                label: "bcnpj_sql_insert_sucessao"
+                processors:
+                  - log:
+                      level: DEBUG
+                      message: 'Inserindo sucessão CNPJ ${! json("cnpjSucedida") } no ClickHouse'
+                  - metric:
+                      type: counter
+                      name: bcnpj_sucessao_inserts_total
+                      value: "1"
+                sql_insert:
+                  driver: clickhouse
+                  dsn: "clickhouse://${CLICKHOUSE_USER}:${CLICKHOUSE_PASSWORD}@${CLICKHOUSE_HOST}:${CLICKHOUSE_PORT}"
+                  conn_max_idle: ${CLICKHOUSE_MAX_IDLE_CONNS:1}
+                  conn_max_open: ${CLICKHOUSE_MAX_OPEN_CONNS:1}
+                  max_in_flight: 1
+                  table: ${BCADASTROS_CNPJ_SUCESSAO_HISTORICO}
+                  init_statement: |
+                    CREATE TABLE IF NOT EXISTS ${BCADASTROS_CNPJ_SUCESSAO_HISTORICO}
+                    (
+                      _id String,
+                      deleted Bool,
+                      seq String,
+                      rev UInt16,
+                      cnpjSucedida String,
+                      id String,
+                      sucessoes String,
+                      timestamp_received DateTime,
+
+                      -- ÍNDICES
+                      INDEX idx_ts_received timestamp_received TYPE minmax GRANULARITY 4
+                    )
+                    ENGINE = ReplacingMergeTree(timestamp_received)
+                    ORDER BY (cnpjSucedida, rev)
+                    PARTITION BY toYYYYMM(timestamp_received)
+                    SETTINGS storage_policy = 'ds3_cold',
+                     index_granularity = 8192;
+                  columns:
+                    - _id
+                    - deleted
+                    - seq
+                    - rev
+                    - cnpjSucedida
+                    - id
+                    - sucessoes
+                    - timestamp_received
+                  args_mapping: |
+                    [
+                      this._id,
+                      this.deleted,
+                      this.seq,
+                      this.rev,
+                      this.cnpjSucedida,
+                      this.id,
+                      this.sucessoes.string(),
+                      this.timestamp_received
+                    ]
+                  batching:
+                    count: ${COUCHDB_DB_CNPJ_LIMIT}
+                    period: 10s
+            - check: this.tipo_doc == "desconhecido"
+              output:
+                label: "bcnpj_sql_insert_desconhecido"
+                processors:
+                  - log:
+                      level: DEBUG
+                      message: 'Inserindo documento desconhecido ${! json("_id") } no ClickHouse'
+                  - metric:
+                      type: counter
+                      name: bcnpj_desconhecido_inserts_total
+                      value: "1"
+                sql_insert:
+                  driver: clickhouse
+                  dsn: "clickhouse://${CLICKHOUSE_USER}:${CLICKHOUSE_PASSWORD}@${CLICKHOUSE_HOST}:${CLICKHOUSE_PORT}"
+                  conn_max_idle: ${CLICKHOUSE_MAX_IDLE_CONNS:1}
+                  conn_max_open: ${CLICKHOUSE_MAX_OPEN_CONNS:1}
+                  max_in_flight: 1
+                  table: ${BCADASTROS_CNPJ_DESCONHECIDO_HISTORICO}
+                  init_statement: |
+                    CREATE TABLE IF NOT EXISTS ${BCADASTROS_CNPJ_DESCONHECIDO_HISTORICO}
+                    (
+                      _id String,
+                      deleted Bool,
+                      seq String,
+                      rev UInt16,
+                      doc String,
+                      timestamp_received DateTime,
+
+                      -- ÍNDICES
+                      INDEX idx_ts_received timestamp_received TYPE minmax GRANULARITY 4
+                    )
+                    ENGINE = ReplacingMergeTree(timestamp_received)
+                    ORDER BY (_id, rev)
+                    PARTITION BY toYYYYMM(timestamp_received)
+                    SETTINGS storage_policy = 'ds3_cold',
+                     index_granularity = 8192;
+                  columns:
+                    - _id
+                    - deleted
+                    - seq
+                    - rev
+                    - doc
+                    - timestamp_received
+                  args_mapping: |
+                    [
+                      this._id,
+                      this.deleted,
+                      this.seq,
+                      this.rev,
+                      doc.string(),
+                      this.timestamp_received
+                    ]
+                  batching:
+                    count: ${COUCHDB_DB_CNPJ_LIMIT}
+                    period: 20s
+      - label: "bcnpj_cache_last_seq"
+        cache:
+          target: redis
+          key: "seq_bcnpj"
+        processors:
+          # Grava @new_last_seq no Redis apenas na última mensagem do batch.
+          # Usa batch_index() para identificar de forma confiável,
+          # evitando problemas com CouchDB clusterizado onde last_seq != result.seq.
+          - mapping: |
+              root = if @new_last_seq != null && batch_index() == batch_size() - 1 {
+                @new_last_seq
+              } else {
+                deleted()
+              }
+
+          # Calcula tempo total do ciclo e tempo de escrita no ClickHouse
+          - bloblang: |
+              meta cycle_duration_ms = (timestamp_unix_nano() - @request_start) / 1000000
+              meta write_duration_ms = ((timestamp_unix_nano() - @request_start) / 1000000) - @request_duration_ms
+
+          - log:
+              level: INFO
+              message: 'Ciclo CNPJ completo: total=${! @cycle_duration_ms }ms, fetch=${! @request_duration_ms }ms, write=${! @write_duration_ms }ms, msgs=${! @msgs_processadas }'
+
+          # Métrica: Tempo total do ciclo (fetch + processamento + insert)
+          - metric:
+              type: gauge
+              name: bcnpj_cycle_duration_ms
+              value: ${! @cycle_duration_ms }
+
+          # Métrica: Tempo de escrita no ClickHouse (total - fetch)
+          - metric:
+              type: gauge
+              name: bcnpj_write_duration_ms
+              value: ${! @write_duration_ms }
+
+          - log:
+              level: DEBUG
+              message: 'Atualizando sequência CNPJ no Redis para: ${! @new_last_seq.string().slice(0, 15) }'
+          - metric:
+              type: gauge
+              name: bcnpj_last_sequence_updated
+              value: "1"
+          - metric:
+              type: gauge
+              name: bcnpj_last_sequence_number
+              value: ${! @new_last_seq.string().split("-").index(0).number().catch(0) }

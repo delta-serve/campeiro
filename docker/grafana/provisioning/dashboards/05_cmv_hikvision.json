@@ -1,0 +1,365 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "panels": [
+    {
+      "title": "Mensagens Recebidas",
+      "type": "stat",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+      "targets": [{ "expr": "cmv_hik_messages_received_total", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }]
+          }
+        }
+      }
+    },
+    {
+      "title": "Placas Válidas",
+      "type": "stat",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 0 },
+      "targets": [{ "expr": "cmv_hik_messages_valid_total", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "blue", "value": null }]
+          }
+        }
+      }
+    },
+    {
+      "title": "Mensagens Enriquecidas",
+      "type": "stat",
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 0 },
+      "targets": [{ "expr": "cmv_hik_messages_enriched_total", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "purple", "value": null }]
+          }
+        }
+      }
+    },
+    {
+      "title": "Enviadas ao Kafka",
+      "type": "stat",
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 0 },
+      "targets": [{ "expr": "cmv_hik_kafka_output_total", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "orange", "value": null }]
+          }
+        }
+      }
+    },
+    {
+      "title": "Pipeline - Funil de Conversão",
+      "type": "bargauge",
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 5 },
+      "targets": [
+        { "expr": "cmv_hik_messages_received_total", "legendFormat": "1. Recebidas", "refId": "A" },
+        { "expr": "cmv_hik_messages_valid_total", "legendFormat": "2. Válidas", "refId": "B" },
+        { "expr": "cmv_hik_messages_enriched_total", "legendFormat": "3. Enriquecidas", "refId": "C" },
+        { "expr": "cmv_hik_kafka_output_total", "legendFormat": "4. Output", "refId": "D" }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "continuous-GrYlRd" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 1000 },
+              { "color": "green", "value": 5000 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Taxas de Conversão",
+      "type": "stat",
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 5 },
+      "targets": [
+        {
+          "expr": "(cmv_hik_messages_valid_total / cmv_hik_messages_received_total) * 100",
+          "legendFormat": "% Placas Válidas",
+          "refId": "A"
+        },
+        {
+          "expr": "(cmv_hik_messages_enriched_total / cmv_hik_messages_valid_total) * 100",
+          "legendFormat": "% Enriquecidas",
+          "refId": "B"
+        },
+        {
+          "expr": "(cmv_hik_kafka_output_total / cmv_hik_messages_enriched_total) * 100",
+          "legendFormat": "% Output",
+          "refId": "C"
+        },
+        {
+          "expr": "(cmv_hik_kafka_output_total / cmv_hik_messages_received_total) * 100",
+          "legendFormat": "Conversão Total",
+          "refId": "D"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "unit": "percent",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "green", "value": 90 }
+            ]
+          },
+          "min": 0,
+          "max": 100
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "orientation": "auto"
+      }
+    },
+    {
+      "title": "Taxa Recepção (msg/s)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
+      "targets": [{ "expr": "rate(cmv_hik_messages_received_total[1m])", "legendFormat": "Recebidas/s", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 20,
+            "showPoints": "auto"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "values": ["value", "min", "max", "mean"]
+        }
+      }
+    },
+    {
+      "title": "Taxa Output (msg/s)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
+      "targets": [{ "expr": "rate(cmv_hik_kafka_output_total[1m])", "legendFormat": "Output/s", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 20,
+            "showPoints": "auto"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "values": ["value", "min", "max", "mean"]
+        }
+      }
+    },
+    {
+      "title": "Pipeline Completo - Todas as Etapas",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 23 },
+      "targets": [
+        { "expr": "rate(cmv_hik_messages_received_total[1m])", "legendFormat": "Recebidas/s", "refId": "A" },
+        { "expr": "rate(cmv_hik_messages_valid_total[1m])", "legendFormat": "Válidas/s", "refId": "B" },
+        { "expr": "rate(cmv_hik_messages_enriched_total[1m])", "legendFormat": "Enriquecidas/s", "refId": "C" },
+        { "expr": "rate(cmv_hik_kafka_output_total[1m])", "legendFormat": "Output/s", "refId": "D" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": ["value", "min", "max", "mean", "last"]
+        }
+      }
+    },
+    {
+      "title": "Taxa de Placas Válidas (%)",
+      "type": "gauge",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 31 },
+      "targets": [{
+        "expr": "(cmv_hik_messages_valid_total / cmv_hik_messages_received_total) * 100",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "unit": "percent",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "green", "value": 85 }
+            ]
+          },
+          "min": 0,
+          "max": 100
+        }
+      },
+      "options": {
+        "showThresholdLabels": true,
+        "showThresholdMarkers": true
+      }
+    },
+    {
+      "title": "Taxa de Enriquecimento (%)",
+      "type": "gauge",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 31 },
+      "targets": [{
+        "expr": "(cmv_hik_messages_enriched_total / cmv_hik_messages_valid_total) * 100",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "unit": "percent",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 80 },
+              { "color": "green", "value": 95 }
+            ]
+          },
+          "min": 0,
+          "max": 100
+        }
+      },
+      "options": {
+        "showThresholdLabels": true,
+        "showThresholdMarkers": true
+      }
+    },
+    {
+      "title": "Conversão Total (%)",
+      "type": "gauge",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 31 },
+      "targets": [{
+        "expr": "(cmv_hik_kafka_output_total / cmv_hik_messages_received_total) * 100",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "unit": "percent",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 60 },
+              { "color": "green", "value": 80 }
+            ]
+          },
+          "min": 0,
+          "max": 100
+        }
+      },
+      "options": {
+        "showThresholdLabels": true,
+        "showThresholdMarkers": true
+      }
+    },
+    {
+      "title": "Perdas no Pipeline",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 39 },
+      "targets": [
+        {
+          "expr": "cmv_hik_messages_received_total - cmv_hik_messages_valid_total",
+          "legendFormat": "Placas Inválidas",
+          "refId": "A"
+        },
+        {
+          "expr": "cmv_hik_messages_valid_total - cmv_hik_messages_enriched_total",
+          "legendFormat": "Falha Enriquecimento",
+          "refId": "B"
+        },
+        {
+          "expr": "cmv_hik_messages_enriched_total - cmv_hik_kafka_output_total",
+          "legendFormat": "Falha Output",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 100 },
+              { "color": "red", "value": 1000 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "orientation": "auto"
+      }
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 38,
+  "tags": ["benthos", "bento", "streams", "cmv", "hikvision", "lpr"],
+  "time": { "from": "now-1h", "to": "now" },
+  "title": "CMV - Hikvision LPR",
+  "uid": "cmv_hik_dashboard",
+  "version": 1
+}

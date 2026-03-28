@@ -1,0 +1,266 @@
+name: 🐛 Bug de Processamento
+description: Reportar bug em pipeline (perda de mensagens, duplicação, falha de parsing)
+title: "[Bug] <Descrição - ex: Perda de mensagens no rebalanceamento Kafka>"
+labels: ["tipo:bug"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Template para Bug de Processamento
+        
+        Use este template para reportar bugs em pipelines Bento (perda de mensagens, duplicação, erros, etc.).
+        
+        ---
+  
+  - type: textarea
+    id: descricao
+    attributes:
+      label: Descrição do Bug
+      description: Descreva claramente o problema
+      placeholder: |
+        Pipeline ab_retorno_renavam está perdendo mensagens durante
+        rebalanceamento do consumer group Kafka.
+        
+        Observado: ~1-2% de mensagens não aparecem no ClickHouse
+        após rebalanceamento (scale up/down, restart).
+    validations:
+      required: true
+  
+  - type: input
+    id: pipeline
+    attributes:
+      label: Pipeline Afetado
+      description: Qual pipeline apresenta o bug?
+      placeholder: "Ex: ab_retorno_renavam.yaml"
+    validations:
+      required: true
+  
+  - type: dropdown
+    id: componente
+    attributes:
+      label: Componente Afetado
+      description: Onde o bug ocorre?
+      options:
+        - Input (Kafka consumer, HTTP, file)
+        - Processor (Bloblang, transformações)
+        - Output (ClickHouse, Kafka producer, HTTP)
+        - Buffer (mensagens em memória/disco)
+        - Error handling (DLQ, retry)
+    validations:
+      required: true
+  
+  - type: dropdown
+    id: tipo_bug
+    attributes:
+      label: Tipo de Bug
+      description: Classifique o problema
+      options:
+        - Perda de mensagens (data loss)
+        - Duplicação de mensagens
+        - Falha de parsing (schema inválido, JSON malformado)
+        - Timeout (input, output, processamento)
+        - Falha de conexão (Kafka, ClickHouse, HTTP)
+        - Memory leak (uso crescente de memória)
+        - Crash (pipeline para de funcionar)
+        - Outro (especificar na descrição)
+    validations:
+      required: true
+  
+  - type: textarea
+    id: reproducao
+    attributes:
+      label: Como Reproduzir
+      description: Passos para reproduzir o bug
+      placeholder: |
+        1. Iniciar pipeline: docker-compose up -d ab_retorno_renavam
+        2. Produzir 10k mensagens via kafkacat para topic ab.retorno.renavam
+        3. Durante produção, fazer scale down: docker-compose scale ab_retorno_renavam=0
+        4. Aguardar rebalanceamento do consumer group (~30s)
+        5. Fazer scale up: docker-compose scale ab_retorno_renavam=1
+        6. Verificar ClickHouse: COUNT(*) deve ser 10k, mas aparece ~9800
+        7. Diferença: ~200 mensagens perdidas (2%)
+    validations:
+      required: true
+  
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Evidências
+      description: Cole logs, stack traces, mensagens de erro
+      placeholder: |
+        ```
+        [2026-03-13 10:15:32] WARN kafka input: Rebalancing consumer group
+        [2026-03-13 10:15:33] INFO kafka input: Partition 0 assigned
+        [2026-03-13 10:15:33] ERROR clickhouse output: Connection lost during batch write
+        [2026-03-13 10:15:34] WARN buffer: Discarding 187 messages (buffer full)
+        ```
+        
+        **ClickHouse:**
+        ```sql
+        SELECT COUNT(*) FROM ds1.ab_retorno_renavam
+        -- Resultado: 9813 (esperado: 10000)
+        ```
+      render: shell
+    validations:
+      required: false
+  
+  - type: textarea
+    id: comportamento_esperado
+    attributes:
+      label: Comportamento Esperado
+      description: O que deveria acontecer?
+      placeholder: |
+        Durante rebalanceamento Kafka:
+        1. Consumer deve fazer commit de offset SOMENTE após batch write no ClickHouse
+        2. Buffer deve reter mensagens até write bem-sucedido
+        3. Mensagens não commitadas devem ser reprocessadas pelo novo consumer
+        4. COUNT(*) no ClickHouse deve bater com mensagens produzidas (10k)
+    validations:
+      required: true
+  
+  - type: textarea
+    id: comportamento_atual
+    attributes:
+      label: Comportamento Atual
+      description: O que está acontecendo?
+      placeholder: |
+        Durante rebalanceamento:
+        1. Consumer faz commit de offset ANTES de batch write no ClickHouse
+        2. Se batch write falhar (conexão perdida), mensagens são perdidas
+        3. Novo consumer inicia do offset já commitado, pulando mensagens perdidas
+        4. Resultado: ~2% de data loss durante rebalanceamentos
+    validations:
+      required: true
+  
+  - type: textarea
+    id: causa_provavel
+    attributes:
+      label: Causa Provável
+      description: Qual sua hipótese inicial?
+      placeholder: |
+        Configuração Kafka input está com auto-commit habilitado:
+        
+        ```yaml
+        input:
+          kafka:
+            addresses: [kafka:9092]
+            topics: [ab.retorno.renavam]
+            consumer_group: bento-ab-retorno
+            # ❌ PROBLEMA: commit_period está configurado
+            # Isso faz commit periódico, não após output
+            checkpoint_limit: 1000
+        ```
+        
+        **Solução provável:**
+        - Remover auto-commit
+        - Usar manual commit SOMENTE após output bem-sucedido
+    validations:
+      required: false
+  
+  - type: checkboxes
+    id: solucoes
+    attributes:
+      label: Soluções Propostas
+      description: Marque as correções a serem aplicadas
+      options:
+        - label: Ajustar commit de offset (manual, após output)
+          required: false
+        - label: Adicionar retry policy no output
+          required: false
+        - label: Aumentar buffer size (reter mais mensagens)
+          required: false
+        - label: Adicionar DLQ (mensagens com erro para topic separado)
+          required: false
+        - label: Adicionar schema validation (rejeitar mensagens inválidas cedo)
+          required: false
+        - label: Ajustar timeout (input, processor, output)
+          required: false
+        - label: Adicionar health check (restart automático em caso de falha)
+          required: false
+  
+  - type: textarea
+    id: impacto
+    attributes:
+      label: Impacto
+      description: Quais mensagens/sistemas são afetados?
+      placeholder: |
+        **Período afetado:** Últimos 30 dias (cada rebalanceamento)
+        **Mensagens afetadas:** ~2% de data loss por rebalanceamento
+        **Frequência:** 3-5 rebalanceamentos/dia (scale, deploys, restarts)
+        **Total estimado:** ~6-10% de mensagens perdidas no mês
+        
+        **Downstream:**
+        - ClickHouse table ds1.ab_retorno_renavam: dados incompletos
+        - Dashboard Grafana: métricas subestimadas (~10% a menos)
+        - API REST: retorna dados parciais
+    validations:
+      required: true
+  
+  - type: dropdown
+    id: data_loss
+    attributes:
+      label: Perda de Dados?
+      description: Há data loss?
+      options:
+        - "Sim - recuperável (mensagens ainda em Kafka retention)"
+        - "Sim - irrecuperável (mensagens fora de retention)"
+        - "Não (bug de lógica, sem perda)"
+    validations:
+      required: true
+  
+  - type: textarea
+    id: estrategia_recuperacao
+    attributes:
+      label: Estratégia de Recuperação (se data loss)
+      description: Como recuperar dados perdidos?
+      placeholder: |
+        1. Identificar offset range perdido (via logs Kafka)
+        2. Criar consumer temporário para reprocessar mensagens:
+           ```bash
+           kafka-consumer-groups --bootstrap-server kafka:9092 \
+             --group bento-ab-retorno-recovery \
+             --topic ab.retorno.renavam \
+             --reset-offsets --to-datetime 2026-03-13T10:15:00
+           ```
+        3. Executar pipeline com consumer group separado
+        4. Validar COUNT(*) no ClickHouse (deve bater)
+        5. Remover consumer group temporário
+    validations:
+      required: false
+  
+  - type: dropdown
+    id: prioridade
+    attributes:
+      label: Prioridade
+      description: Urgência da correção
+      options:
+        - baixa (bug menor, pouco impacto)
+        - média (bug moderado, workaround disponível)
+        - alta (bug sério, data loss < 10%)
+        - crítica (bloqueante, pipeline parado, data loss > 10%)
+    validations:
+      required: true
+  
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        
+        ## Checklist de Correção
+        
+        - [ ] Reprodução do bug documentada (passos claros)
+        - [ ] Logs/evidências coletados
+        - [ ] Causa raiz identificada (config, código, infra)
+        - [ ] Solução proposta (config Bento corrigida)
+        - [ ] Teste em dev (reproduzir bug → aplicar fix → validar)
+        - [ ] Teste de regressão (garantir que fix funciona)
+        - [ ] Estratégia de recuperação (se data loss)
+        - [ ] Monitoramento/alerta para prevenir recorrência
+        - [ ] Documentação atualizada (troubleshooting)
+        
+        ## Links Úteis
+        
+        - [Bento Error Handling](https://warpstreamlabs.github.io/bento/docs/configuration/error_handling)
+        - [Kafka Offset Management](https://kafka.apache.org/documentation/#consumerconfigs_auto.offset.reset)
+        - [ClickHouse Async Inserts](https://clickhouse.com/docs/en/optimize/asynchronous-inserts)

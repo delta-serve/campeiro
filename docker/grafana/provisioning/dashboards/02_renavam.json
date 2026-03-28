@@ -1,0 +1,2263 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "destination",
+        "label": "Destino",
+        "type": "query",
+        "query": "label_values(renavam_messages_sent_total, destination)",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus_ds"
+        },
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "multi": true,
+        "refresh": 2,
+        "sort": 1
+      },
+      {
+        "name": "orgao",
+        "label": "Órgão",
+        "type": "query",
+        "query": "label_values(renavam_messages_by_orgao, orgao)",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus_ds"
+        },
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "multi": true,
+        "refresh": 2,
+        "sort": 1
+      },
+      {
+        "name": "status",
+        "label": "Status",
+        "type": "query",
+        "query": "label_values(renavam_messages_master, status)",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus_ds"
+        },
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "multi": true,
+        "refresh": 2,
+        "sort": 1
+      },
+      {
+        "name": "empresa",
+        "label": "Empresa",
+        "type": "query",
+        "query": "label_values(renavam_messages_by_empresa, empresa)",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus_ds"
+        },
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "multi": true,
+        "refresh": 2,
+        "sort": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "title": "── OVERVIEW - Visão Geral Consolidada ──",
+      "type": "row",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "title": "Total Input",
+      "type": "stat",
+      "gridPos": {
+        "h": 5,
+        "w": 5,
+        "x": 0,
+        "y": 1
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(renavam_messages_master{status=~\"$status\", destination=~\"$destination\"}[$__range]))",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus_ds"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "textMode": "value",
+        "graphMode": "area",
+        "colorMode": "value"
+      }
+    },
+    {
+      "title": "Taxa Input",
+      "type": "stat",
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 5,
+        "y": 1
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(renavam_messages_master{status=~\"$status\", destination=~\"$destination\"}[1m]))",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus_ds"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "msg/s",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "textMode": "value",
+        "graphMode": "area",
+        "colorMode": "value"
+      }
+    },
+    {
+      "title": "Total Output",
+      "type": "stat",
+      "description": "Total consolidado de mensagens enviadas para todos os destinos (Kafka Archive + Kafka Simtrans + RabbitMQ Sentry + HTTP Navegantes + Outros). Métrica: renavam_messages_sent_total (registrada no pipeline antes dos outputs).",
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 9,
+        "y": 1
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(renavam_messages_master{status=~\"$status\", destination=~\"$destination\"}[$__range]))",
+          "refId": "A",
+          "legendFormat": "Total Enviado",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus_ds"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short",
+          "decimals": 0
+        }
+      },
+      "options": {
+        "textMode": "value",
+        "graphMode": "area",
+        "colorMode": "value"
+      }
+    },
+    {
+      "title": "Taxa Erro %",
+      "type": "stat",
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 13,
+        "y": 1
+      },
+      "targets": [
+        {
+          "expr": "(sum(rate(output_error{stream=\"ab_retorno_renavam\"}[5m])) \n / clamp_min(sum(rate(output_batch_sent{stream=\"ab_retorno_renavam\"}[5m])), 0.001)) * 100",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus_ds"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "percent",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.1
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "textMode": "value",
+        "graphMode": "area",
+        "colorMode": "value"
+      }
+    },
+    {
+      "title": "Health Status",
+      "type": "gauge",
+      "gridPos": {
+        "h": 5,
+        "w": 7,
+        "x": 17,
+        "y": 1
+      },
+      "targets": [
+        {
+          "expr": "clamp_max(\n  clamp_min(\n    100 \n    - (sum(rate(output_error{stream=\"ab_retorno_renavam\"}[5m])) \n       / clamp_min(sum(rate(output_batch_sent{stream=\"ab_retorno_renavam\"}[5m])), 0.001)) * 100\n    - clamp_min(\n        (histogram_quantile(0.95, \n          sum(rate(output_latency_ns_bucket{label=~\"ab_retorno_renavam_output.*\", stream=\"ab_retorno_renavam\"}[5m])) by (le)\n        ) > 5) * 10, 0),\n  0), 100)\nor vector(100)",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus_ds"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 70
+              },
+              {
+                "color": "green",
+                "value": 90
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "showThresholdLabels": true,
+        "showThresholdMarkers": true
+      }
+    },
+    {
+      "title": "Output por Protocolo",
+      "type": "piechart",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 6
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(renavam_messages_sent_total{destination!=\"navegantes\", destination!=\"sentry\", destination=~\"$destination\"}[$__range]))",
+          "legendFormat": "Kafka",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus_ds"
+          }
+        },
+        {
+          "expr": "sum(increase(renavam_http_navegantes_sent_total[$__range]))",
+          "legendFormat": "HTTP",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus_ds"
+          }
+        },
+        {
+          "expr": "sum(increase(renavam_rabbitmq_sentry_sent_total[$__range]))",
+          "legendFormat": "RabbitMQ",
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus_ds"
+          }
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        },
+        "pieType": "donut"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Kafka"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "HTTP"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "RabbitMQ"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "purple",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "title": "Taxa Consolidada por Protocolo (msg/s)",
+      "type": "timeseries",
+      "description": "Taxa de envio por protocolo (msg/s). Queries A/B/C mostram protocolos separados. Query D (Total) usa renavam_messages_sent_total registrada no pipeline.",
+      "gridPos": {
+        "h": 8,
+        "w": 16,
+        "x": 8,
+        "y": 6
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(renavam_messages_sent_total{destination!=\"navegantes\", destination!=\"sentry\", destination=~\"$destination\"}[1m]))",
+          "legendFormat": "Kafka",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus_ds"
+          }
+        },
+        {
+          "expr": "sum(rate(renavam_http_navegantes_sent_total[1m]))",
+          "legendFormat": "HTTP",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus_ds"
+          }
+        },
+        {
+          "expr": "sum(rate(renavam_rabbitmq_sentry_sent_total[1m]))",
+          "legendFormat": "RabbitMQ",
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus_ds"
+          }
+        },
+        {
+          "expr": "sum(rate(renavam_messages_sent_total{destination=~\"$destination\"}[1m]))",
+          "legendFormat": "Total",
+          "refId": "D",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus_ds"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Kafka"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "HTTP"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "RabbitMQ"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "purple",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Total"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    10,
+                    10
+                  ]
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "title": "── LATÊNCIA DE ENTREGA ──",
+      "type": "row",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 14
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "title": "Latência Média",
+      "type": "stat",
+      "description": "Tempo médio entre o recebimento (dataRecebimento) e a entrega da mensagem.",
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 15
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(renavam_delivery_latency_ns_sum{destination=~\"$destination\"}[5m])) / clamp_min(sum(rate(renavam_delivery_latency_ns_count{destination=~\"$destination\"}[5m])), 0.001)",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus_ds"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "s",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 30
+              },
+              {
+                "color": "red",
+                "value": 120
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "textMode": "value",
+        "graphMode": "area",
+        "colorMode": "value"
+      }
+    },
+    {
+      "title": "Latência P95",
+      "type": "stat",
+      "description": "Percentil 95 da latência de entrega.",
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 15
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(renavam_delivery_latency_ns_bucket{destination=~\"$destination\"}[5m])) by (le))",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus_ds"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "s",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 60
+              },
+              {
+                "color": "red",
+                "value": 180
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "textMode": "value",
+        "graphMode": "area",
+        "colorMode": "value"
+      }
+    },
+    {
+      "title": "Latência P99",
+      "type": "stat",
+      "description": "Percentil 99 da latência de entrega.",
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 15
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(renavam_delivery_latency_ns_bucket{destination=~\"$destination\"}[5m])) by (le))",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus_ds"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "s",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 120
+              },
+              {
+                "color": "red",
+                "value": 300
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "textMode": "value",
+        "graphMode": "area",
+        "colorMode": "value"
+      }
+    },
+    {
+      "title": "Output Mais Lento (P95)",
+      "type": "stat",
+      "description": "P95 da latência do output mais lento (inclui batching e I/O de rede).",
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 15
+      },
+      "targets": [
+        {
+          "expr": "max(histogram_quantile(0.95, sum(rate(renavam_output_delivery_latency_ns_bucket[5m])) by (le, output)))",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus_ds"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "s",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 60
+              },
+              {
+                "color": "red",
+                "value": 180
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "textMode": "value",
+        "graphMode": "area",
+        "colorMode": "value"
+      }
+    },
+    {
+      "title": "Latência Média por Destino",
+      "type": "timeseries",
+      "description": "Tempo médio de entrega por destino ao longo do tempo (dataRecebimento → processamento).",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 20
+      },
+      "targets": [
+        {
+          "expr": "sum by (destination) (rate(renavam_delivery_latency_ns_sum{destination=~\"$destination\"}[5m])) / clamp_min(sum by (destination) (rate(renavam_delivery_latency_ns_count{destination=~\"$destination\"}[5m])), 0.001)",
+          "legendFormat": "{{destination}}",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus_ds"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "title": "Latência por Output (Entrega Real)",
+      "type": "timeseries",
+      "description": "Latência real de entrega por output, incluindo batching e I/O de rede.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 20
+      },
+      "targets": [
+        {
+          "expr": "sum by (output) (rate(renavam_output_delivery_latency_ns_sum[5m])) / clamp_min(sum by (output) (rate(renavam_output_delivery_latency_ns_count[5m])), 0.001)",
+          "legendFormat": "{{output}} - avg",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus_ds"
+          }
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(renavam_output_delivery_latency_ns_bucket[5m])) by (le, output))",
+          "legendFormat": "{{output}} - p95",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus_ds"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "title": "Latência de Processamento Interno (Pipeline Bento)",
+      "type": "timeseries",
+      "description": "Tempo entre a entrada da mensagem no Bento e o envio ao output (mede o processamento interno do pipeline). P50 = mediana, P95 = cauda leve, P99 = cauda pesada.",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 28
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(renavam_processing_latency_ns_bucket{destination=~\"$destination\"}[5m])) by (le))",
+          "legendFormat": "p50 (mediana)",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus_ds"
+          }
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(renavam_processing_latency_ns_bucket{destination=~\"$destination\"}[5m])) by (le))",
+          "legendFormat": "p95",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus_ds"
+          }
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(renavam_processing_latency_ns_bucket{destination=~\"$destination\"}[5m])) by (le))",
+          "legendFormat": "p99",
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus_ds"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "p99" },
+            "properties": [
+              { "id": "color", "value": { "fixedColor": "#F2495C", "mode": "fixed" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "p95" },
+            "properties": [
+              { "id": "color", "value": { "fixedColor": "#FF9830", "mode": "fixed" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "p50 (mediana)" },
+            "properties": [
+              { "id": "color", "value": { "fixedColor": "#73BF69", "mode": "fixed" } }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": ["mean", "max", "last"]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "title": "── DISTRIBUIÇÃO DE NEGÓCIO ──",
+      "type": "row",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 37
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "title": "Distribuição por Órgão",
+      "type": "piechart",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 38
+      },
+      "targets": [
+        {
+          "expr": "sum by (orgao) (increase(renavam_messages_by_orgao{orgao=~\"$orgao\"}[$__range]))",
+          "legendFormat": "{{orgao}}",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus_ds"
+          }
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        },
+        "pieType": "pie"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          }
+        }
+      }
+    },
+    {
+      "title": "Distribuição por Empresa",
+      "type": "piechart",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 38
+      },
+      "targets": [
+        {
+          "expr": "sum by (empresa) (increase(renavam_messages_by_empresa{empresa=~\"$empresa\"}[$__range]))",
+          "legendFormat": "{{empresa}}",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus_ds"
+          }
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        },
+        "pieType": "pie"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          }
+        }
+      }
+    },
+    {
+      "title": "Top 10 Órgãos",
+      "type": "bargauge",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 38
+      },
+      "targets": [
+        {
+          "expr": "topk(10, sum by (orgao) (increase(renavam_messages_by_orgao_status{orgao!=\"DESCONHECIDO\", orgao=~\"$orgao\", status=~\"$status\"}[$__range])))",
+          "legendFormat": "{{orgao}}",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus_ds"
+          }
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          }
+        }
+      }
+    },
+    {
+      "title": "Mensagens por Órgão × Status",
+      "type": "bargauge",
+      "description": "Quantidade de mensagens por órgão e status. Filtrado pela variável $orgao.",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 46
+      },
+      "targets": [
+        {
+          "expr": "sum by (orgao, status) (increase(renavam_messages_by_orgao_status{orgao!=\"DESCONHECIDO\", orgao=~\"$orgao\", status=~\"$status\"}[$__range]))",
+          "legendFormat": "{{orgao}} — {{status}}",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus_ds"
+          }
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "decimals": 0
+        }
+      }
+    },
+    {
+      "title": "Top 10 Órgãos - Maior Taxa de Erro",
+      "type": "bargauge",
+      "description": "Órgãos com maior percentual de consultas com erro. Útil para identificar problemas por órgão.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 54
+      },
+      "targets": [
+        {
+          "expr": "topk(10, sum by (orgao) (increase(renavam_messages_by_orgao_status{status!=\"OK\", orgao!=\"DESCONHECIDO\", orgao=~\"$orgao\"}[$__range])) / clamp_min(sum by (orgao) (increase(renavam_messages_by_orgao_status{orgao!=\"DESCONHECIDO\", orgao=~\"$orgao\"}[$__range])), 1) * 100)",
+          "legendFormat": "{{orgao}}",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus_ds"
+          }
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 5
+              },
+              {
+                "color": "red",
+                "value": 15
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Distribuição por Status",
+      "type": "piechart",
+      "description": "Distribuição OK/ERRO por status, filtrado por órgão.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 54
+      },
+      "targets": [
+        {
+          "expr": "sum by (status) (increase(renavam_messages_by_orgao_status{orgao=~\"$orgao\", status=~\"$status\"}[$__range]))",
+          "legendFormat": "{{status}}",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus_ds"
+          }
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        },
+        "pieType": "pie"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "OK": {
+                  "color": "#73BF69",
+                  "index": 0
+                },
+                "ERRO": {
+                  "color": "#F2495C",
+                  "index": 1
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "title": "── DETALHAMENTO POR OUTPUT (Kafka | HTTP | RabbitMQ) ──",
+      "type": "row",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 62
+      },
+      "collapsed": true,
+      "panels": [
+        {
+          "title": "Kafka - Total",
+          "type": "stat",
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 0,
+            "y": 24
+          },
+          "targets": [
+            {
+              "expr": "sum(increase(renavam_messages_sent_total{destination!=\"navegantes\", destination!=\"sentry\", destination=~\"$destination\"}[$__range]))",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus_ds"
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "blue",
+                    "value": null
+                  }
+                ]
+              }
+            }
+          },
+          "options": {
+            "textMode": "value",
+            "graphMode": "area",
+            "colorMode": "value"
+          }
+        },
+        {
+          "title": "HTTP - Total",
+          "type": "stat",
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 8,
+            "y": 24
+          },
+          "targets": [
+            {
+              "expr": "sum(increase(renavam_http_navegantes_sent_total[$__range]))",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus_ds"
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "orange",
+                    "value": null
+                  }
+                ]
+              }
+            }
+          },
+          "options": {
+            "textMode": "value",
+            "graphMode": "area",
+            "colorMode": "value"
+          }
+        },
+        {
+          "title": "RabbitMQ - Total",
+          "type": "stat",
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 16,
+            "y": 24
+          },
+          "targets": [
+            {
+              "expr": "sum(increase(renavam_rabbitmq_sentry_sent_total[$__range]))",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus_ds"
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "purple",
+                    "value": null
+                  }
+                ]
+              }
+            }
+          },
+          "options": {
+            "textMode": "value",
+            "graphMode": "area",
+            "colorMode": "value"
+          }
+        },
+        {
+          "title": "Kafka - Taxa (msg/s)",
+          "type": "stat",
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 0,
+            "y": 37
+          },
+          "targets": [
+            {
+              "expr": "sum(rate(renavam_messages_sent_total{destination!=\"navegantes\", destination!=\"sentry\", destination=~\"$destination\"}[1m]))",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus_ds"
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "unit": "short",
+              "decimals": 1,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "blue",
+                    "value": null
+                  }
+                ]
+              }
+            }
+          },
+          "options": {
+            "textMode": "value",
+            "graphMode": "area",
+            "colorMode": "value"
+          }
+        },
+        {
+          "title": "HTTP - Taxa (batch/s)",
+          "type": "stat",
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 8,
+            "y": 37
+          },
+          "targets": [
+            {
+              "expr": "sum(rate(renavam_http_navegantes_sent_total[1m]))",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus_ds"
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "unit": "short",
+              "decimals": 2,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "orange",
+                    "value": null
+                  }
+                ]
+              }
+            }
+          },
+          "options": {
+            "textMode": "value",
+            "graphMode": "area",
+            "colorMode": "value"
+          }
+        },
+        {
+          "title": "RabbitMQ - Taxa (batch/s)",
+          "type": "stat",
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 16,
+            "y": 37
+          },
+          "targets": [
+            {
+              "expr": "sum(rate(renavam_rabbitmq_sentry_sent_total[1m]))",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus_ds"
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "unit": "short",
+              "decimals": 2,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "purple",
+                    "value": null
+                  }
+                ]
+              }
+            }
+          },
+          "options": {
+            "textMode": "value",
+            "graphMode": "area",
+            "colorMode": "value"
+          }
+        },
+        {
+          "title": "Kafka - Erros",
+          "type": "stat",
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 0,
+            "y": 41
+          },
+          "targets": [
+            {
+              "expr": "sum(increase(output_error{stream=\"ab_retorno_renavam\", label=~\"ab_retorno_renavam_output_simtrans|ab_retorno_renavam_output_outros|ab_retorno_renavam_output_eventos\"}[$__range]))",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus_ds"
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              }
+            }
+          },
+          "options": {
+            "textMode": "value",
+            "graphMode": "area",
+            "colorMode": "value"
+          }
+        },
+        {
+          "title": "HTTP - Erros",
+          "type": "stat",
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 8,
+            "y": 41
+          },
+          "targets": [
+            {
+              "expr": "sum(increase(output_error{stream=\"ab_retorno_renavam\", label=\"ab_retorno_renavam_output_navegantes\"}[$__range]))",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus_ds"
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              }
+            }
+          },
+          "options": {
+            "textMode": "value",
+            "graphMode": "area",
+            "colorMode": "value"
+          }
+        },
+        {
+          "title": "RabbitMQ - Erros",
+          "type": "stat",
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 16,
+            "y": 41
+          },
+          "targets": [
+            {
+              "expr": "sum(increase(output_error{stream=\"ab_retorno_renavam\", label=\"ab_retorno_renavam_output_sentry\"}[$__range]))",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus_ds"
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              }
+            }
+          },
+          "options": {
+            "textMode": "value",
+            "graphMode": "area",
+            "colorMode": "value"
+          }
+        },
+        {
+          "title": "Kafka - Latência p95",
+          "type": "stat",
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 0,
+            "y": 45
+          },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(output_latency_ns_bucket{label=~\"ab_retorno_renavam_output_simtrans|ab_retorno_renavam_output_outros|ab_retorno_renavam_output_eventos\"}[5m])) by (le))",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus_ds"
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "unit": "s",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 0.5
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              }
+            }
+          },
+          "options": {
+            "textMode": "value",
+            "graphMode": "area",
+            "colorMode": "value"
+          }
+        },
+        {
+          "title": "HTTP - Latência p95",
+          "type": "stat",
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 8,
+            "y": 45
+          },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(output_latency_ns_bucket{label=\"ab_retorno_renavam_output_navegantes\"}[5m])) by (le))",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus_ds"
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "unit": "s",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 0.5
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              }
+            }
+          },
+          "options": {
+            "textMode": "value",
+            "graphMode": "area",
+            "colorMode": "value"
+          }
+        },
+        {
+          "title": "RabbitMQ - Latência p95",
+          "type": "stat",
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 16,
+            "y": 45
+          },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(output_latency_ns_bucket{label=\"ab_retorno_renavam_output_sentry\"}[5m])) by (le))",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus_ds"
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "unit": "s",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 0.5
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              }
+            }
+          },
+          "options": {
+            "textMode": "value",
+            "graphMode": "area",
+            "colorMode": "value"
+          }
+        },
+        {
+          "title": "Envios por Protocolo ao Longo do Tempo",
+          "type": "timeseries",
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 49
+          },
+          "targets": [
+            {
+              "expr": "sum(rate(renavam_messages_sent_total{destination!=\"navegantes\", destination!=\"sentry\", destination=~\"$destination\"}[1m]))",
+              "legendFormat": "Kafka",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus_ds"
+              }
+            },
+            {
+              "expr": "sum(rate(renavam_http_navegantes_sent_total[1m]))",
+              "legendFormat": "HTTP",
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus_ds"
+              }
+            },
+            {
+              "expr": "sum(rate(renavam_rabbitmq_sentry_sent_total[1m]))",
+              "legendFormat": "RabbitMQ",
+              "refId": "C",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus_ds"
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "unit": "short"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Kafka"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "blue",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "HTTP"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "orange",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "RabbitMQ"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "purple",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "title": "Erros por Protocolo ao Longo do Tempo",
+          "type": "timeseries",
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 57
+          },
+          "targets": [
+            {
+              "expr": "sum(rate(output_error{stream=\"ab_retorno_renavam\", label=~\"ab_retorno_renavam_output_simtrans|ab_retorno_renavam_output_outros|ab_retorno_renavam_output_eventos\"}[1m]))",
+              "legendFormat": "Kafka Erros",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus_ds"
+              }
+            },
+            {
+              "expr": "sum(rate(output_error{stream=\"ab_retorno_renavam\", label=\"ab_retorno_renavam_output_navegantes\"}[1m]))",
+              "legendFormat": "HTTP Erros",
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus_ds"
+              }
+            },
+            {
+              "expr": "sum(rate(output_error{stream=\"ab_retorno_renavam\", label=\"ab_retorno_renavam_output_sentry\"}[1m]))",
+              "legendFormat": "RabbitMQ Erros",
+              "refId": "C",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus_ds"
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "unit": "short",
+              "custom": {
+                "fillOpacity": 20
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Kafka Erros"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "blue",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "HTTP Erros"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "red",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "RabbitMQ Erros"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "purple",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "title": "Latências p50/p95/p99 por Protocolo",
+          "type": "timeseries",
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 65
+          },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.50, sum(rate(output_latency_ns_bucket{label=~\"ab_retorno_renavam_output.*\"}[5m])) by (le, label))",
+              "legendFormat": "p50 - {{label}}",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus_ds"
+              }
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(output_latency_ns_bucket{label=~\"ab_retorno_renavam_output.*\"}[5m])) by (le, label))",
+              "legendFormat": "p95 - {{label}}",
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus_ds"
+              }
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum(rate(output_latency_ns_bucket{label=~\"ab_retorno_renavam_output.*\"}[5m])) by (le, label))",
+              "legendFormat": "p99 - {{label}}",
+              "refId": "C",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus_ds"
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "unit": "s"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "title": "── ANÁLISE DE VEÍCULOS E DADOS DE NEGÓCIO ──",
+      "type": "row",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 47
+      },
+      "collapsed": true,
+      "panels": [
+        {
+          "title": "Veículos com Restrição Roubo/Furto",
+          "type": "piechart",
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 0,
+            "y": 25
+          },
+          "targets": [
+            {
+              "expr": "sum by (restricao) (increase(renavam_veiculos_restricao_roubo{restricao!=\"N/A\", restricao!=\"DESCONHECIDO\", orgao=~\"$orgao\"}[$__range]))",
+              "legendFormat": "{{restricao}}",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus_ds"
+              }
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "values": [
+                "value",
+                "percent"
+              ]
+            },
+            "pieType": "donut"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              }
+            }
+          }
+        },
+        {
+          "title": "Mensagens por Tipo de Veículo",
+          "type": "bargauge",
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 8,
+            "y": 25
+          },
+          "targets": [
+            {
+              "expr": "topk(10, sum by (tipo_veiculo) (increase(renavam_messages_by_tipo_veiculo{tipo_veiculo!=\"N/A\", tipo_veiculo!=\"DESCONHECIDO\"}[$__range])))",
+              "legendFormat": "{{tipo_veiculo}}",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus_ds"
+              }
+            }
+          ],
+          "options": {
+            "orientation": "horizontal",
+            "displayMode": "gradient",
+            "showUnfilled": true
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              }
+            }
+          }
+        },
+        {
+          "title": "Restrição Roubo/Furto por Órgão",
+          "type": "bargauge",
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 42
+          },
+          "targets": [
+            {
+              "expr": "sum by (orgao, restricao) (increase(renavam_veiculos_restricao_roubo{restricao=\"SIM\", orgao=~\"$orgao\"}[$__range]))",
+              "legendFormat": "{{orgao}} - {{restricao}}",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus_ds"
+              }
+            }
+          ],
+          "options": {
+            "orientation": "horizontal",
+            "displayMode": "gradient",
+            "showUnfilled": true
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "title": "── KAFKA ARCHIVE - Eventos Brutos ──",
+      "type": "row",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 48
+      },
+      "collapsed": true,
+      "panels": [
+        {
+          "title": "Total Eventos Brutos Enviados",
+          "type": "stat",
+          "gridPos": {
+            "h": 6,
+            "w": 12,
+            "x": 0,
+            "y": 26
+          },
+          "targets": [
+            {
+              "expr": "sum(increase(renavam_eventos_raw_sent_total[$__range]))",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus_ds"
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "purple",
+                    "value": null
+                  }
+                ]
+              }
+            }
+          },
+          "options": {
+            "textMode": "value",
+            "graphMode": "area",
+            "colorMode": "value"
+          }
+        },
+        {
+          "title": "Taxa Eventos Brutos (msg/s)",
+          "type": "stat",
+          "gridPos": {
+            "h": 6,
+            "w": 12,
+            "x": 12,
+            "y": 26
+          },
+          "targets": [
+            {
+              "expr": "sum(rate(renavam_eventos_raw_sent_total[1m]))",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus_ds"
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "unit": "short",
+              "decimals": 1,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "purple",
+                    "value": null
+                  }
+                ]
+              }
+            }
+          },
+          "options": {
+            "textMode": "value",
+            "graphMode": "area",
+            "colorMode": "value"
+          }
+        }
+      ]
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 38,
+  "tags": [
+    "benthos",
+    "bento",
+    "streams",
+    "renavam"
+  ],
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "title": "RENAVAM - AB Retorno",
+  "uid": "renavam_dashboard",
+  "timepicker": {
+    "refresh_intervals": [
+      "5s",
+      "10s",
+      "30s",
+      "1m",
+      "5m"
+    ]
+  },
+  "version": 11
+}

@@ -1,0 +1,5 @@
+cache_resources:
+  - label: "redis"
+    redis:
+      url: ${REDIS_URL}
+      prefix: bento_streams__

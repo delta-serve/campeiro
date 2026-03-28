@@ -1,0 +1,136 @@
+input:
+  kafka_franz:
+    seed_brokers: [ 'egw-nprod-ibm-egw-rt-cp4i.apps.openshift.fazenda.mg.gov.br:443', ]
+    topics: [${KAFKA_BPE_TOPIC}]
+    consumer_group: ${KAFKA_GROUP_ID}
+    start_from_oldest: true
+    sasl:
+      - mechanism: ${KAFKA_SASL_MECHANISM}
+        password: ${KAFKA_SASL_PASSWORD}
+        username: ${KAFKA_SASL_USERNAME}
+        
+    tls:
+      enabled: true
+      root_cas_file: ${KAFKA_CA_PATH}
+
+buffer:
+  none: {}
+
+pipeline:
+  processors:
+    # Extrai campos-chave e preserva JSON raw completo
+    - label: "sefaz_bpe_data_transform"
+      bloblang: |
+        root = {
+          "nrProtocolo": this.nrProtocolo.or(0).number(),
+          "hashChaveAcesso": this.hashChaveAcesso.or(""),
+          "raw_json": content().string(),
+          "timestamp_received": timestamp_unix()
+        }
+
+    # Métrica: Total de mensagens recebidas do Kafka
+    - metric:
+        type: counter
+        name: bpe_messages_received_total
+        value: "1"
+
+output:
+  label: sefaz_bpe_output
+  fallback:
+    # Output principal: insert no ClickHouse
+    - label: sefaz_bpe_clickhouse
+      sql_insert:
+        driver: clickhouse
+        dsn: "clickhouse://${CLICKHOUSE_DS4_USER}:${CLICKHOUSE_DS4_PASSWORD}@${CLICKHOUSE_DS4_HOST}:${CLICKHOUSE_DS4_PORT}"
+        conn_max_idle: ${CLICKHOUSE_DS4_MAX_IDLE_CONNS:1}
+        conn_max_open: ${CLICKHOUSE_DS4_MAX_OPEN_CONNS:1}
+        max_in_flight: 1
+        table: ${SEFAZ_BPE_TABLE}
+        init_statement: |
+          CREATE TABLE IF NOT EXISTS ${SEFAZ_BPE_TABLE} (
+              nrProtocolo UInt64,
+              hashChaveAcesso String,
+              raw_json String,
+              timestamp_received DateTime DEFAULT now(),
+              INDEX idx_timestamp_received timestamp_received TYPE minmax GRANULARITY 4
+          )
+          ENGINE = MergeTree()
+          ORDER BY (nrProtocolo, timestamp_received)
+          PARTITION BY toYYYYMM(timestamp_received);
+        columns:
+          - nrProtocolo
+          - hashChaveAcesso
+          - raw_json
+          - timestamp_received
+        args_mapping: |
+          [
+            this.nrProtocolo,
+            this.hashChaveAcesso,
+            this.raw_json,
+            this.timestamp_received
+          ]
+        batching:
+          count: ${SEFAZ_BPE_BATCH_COUNT:1000}
+          period: ${SEFAZ_BPE_BATCH_PERIOD:10s}
+      processors:
+        # Métrica: Registros inseridos no ClickHouse
+        - metric:
+            type: counter
+            name: bpe_clickhouse_inserts_total
+            labels:
+              table: "${SEFAZ_BPE_TABLE}"
+
+    # Dead letter: grava erros em tabela separada
+    - label: sefaz_bpe_dead_letter
+      processors:
+        - log:
+            level: ERROR
+            message: "Erro ao inserir BPE no ClickHouse: nrProtocolo=${! this.nrProtocolo } erro=${! error() }"
+        - bloblang: |
+            root = {
+              "nrProtocolo": this.nrProtocolo,
+              "hashChaveAcesso": this.hashChaveAcesso,
+              "raw_json": this.raw_json,
+              "error_message": error(),
+              "timestamp_error": timestamp_unix()
+            }
+        - metric:
+            type: counter
+            name: bpe_dead_letter_total
+            value: "1"
+      sql_insert:
+        driver: clickhouse
+        dsn: "clickhouse://${CLICKHOUSE_DS4_USER}:${CLICKHOUSE_DS4_PASSWORD}@${CLICKHOUSE_DS4_HOST}:${CLICKHOUSE_DS4_PORT}"
+        conn_max_idle: ${CLICKHOUSE_DS4_MAX_IDLE_CONNS:1}
+        conn_max_open: ${CLICKHOUSE_DS4_MAX_OPEN_CONNS:2}
+        max_in_flight: 2
+        table: ${SEFAZ_BPE_ERROR_TABLE}
+        init_statement: |
+          CREATE TABLE IF NOT EXISTS ${SEFAZ_BPE_ERROR_TABLE} (
+              nrProtocolo UInt64,
+              hashChaveAcesso String,
+              raw_json String,
+              error_message String,
+              timestamp_error DateTime DEFAULT now(),
+              INDEX idx_timestamp_error timestamp_error TYPE minmax GRANULARITY 4
+          )
+          ENGINE = MergeTree()
+          ORDER BY (nrProtocolo, timestamp_error)
+          PARTITION BY toYYYYMM(timestamp_error);
+        columns:
+          - nrProtocolo
+          - hashChaveAcesso
+          - raw_json
+          - error_message
+          - timestamp_error
+        args_mapping: |
+          [
+            this.nrProtocolo,
+            this.hashChaveAcesso,
+            this.raw_json,
+            this.error_message,
+            this.timestamp_error
+          ]
+        batching:
+          count: 100
+          period: 30s

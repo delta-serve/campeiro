@@ -1,0 +1,411 @@
+input:
+  generate:
+    interval: "10s"
+    mapping: |
+      root = ""
+
+pipeline:
+  processors:
+    # === ADAPTIVE POLLING: Lê estado do backoff ===
+    - cache:
+        resource: redis
+        operator: get
+        key: "bcpf_backoff_until"
+    - mapping: meta backoff_until = if errored() { 0 } else { content().or("0").string().number().catch(0) }
+    - cache:
+        resource: redis
+        operator: get
+        key: "bcpf_backoff_secs"
+    - mapping: meta backoff_secs = if errored() { 0 } else { content().or("0").string().number().catch(0) }
+
+    # Skip se estamos em período de backoff (evita request ao CouchDB)
+    - bloblang: |
+        root = if @backoff_until > 0 && timestamp_unix() < @backoff_until {
+          deleted()
+        } else {
+          ""
+        }
+
+    - log:
+        level: DEBUG
+        message: "Polling ativo (backoff_secs=${! @backoff_secs })"
+
+    - cache:
+        resource: redis
+        operator: get
+        key: "seq_bcpf"
+    - mapping: meta last_seq_redis = if errored()  { "0" } else { content().string() }
+    - log:
+        level: DEBUG
+        message: "Valor lido do Redis: ${! @last_seq_redis.string().slice(0, 15) }"
+    - log:
+        level: DEBUG
+        message: "Iniciando busca com última sequência: ${! @last_seq_redis.string().slice(0, 15) }"
+      label: "bcpf_pipeline_http_request"
+
+    # Captura timestamp antes do request ao CouchDB
+    - bloblang: 'meta request_start = timestamp_unix_nano()'
+
+    - http:
+        url: "${COUCHDB_URL}/${COUCHDB_DB_CPF}/_changes?include_docs=true&limit=${COUCHDB_LIMIT}&since=${! @last_seq_redis.string() }"
+        verb: GET
+        headers:
+          Accept: "application/json"
+        timeout: "20s"
+        retry_period: "7s"
+        max_retry_backoff: "300s"
+
+    # Calcula duração do request em segundos
+    - bloblang: 'meta request_duration_ms = (timestamp_unix_nano() - @request_start) / 1000000'
+
+    - log:
+        level: INFO
+        message: "CouchDB request levou ${! @request_duration_ms }ms (limit=${COUCHDB_LIMIT})"
+
+    - bloblang: |
+        # Parseia a resposta JSON e armazena last_seq como metadado
+        root = content().parse_json().catch({"results": [], "last_seq": @last_seq_redis})
+        meta new_last_seq = this.last_seq.or(@last_seq_redis)
+        meta msgs_processadas = this.results.length().catch(0)
+
+
+        # Processa cada item do array results se existir
+        root = if this.results.type() == "array" && this.results.length() > 0 {
+          this.results.map_each(item -> item)
+        } else {
+          # Retorna array vazio para permitir atualização do backoff
+          []
+        }
+
+    - log:
+        level: INFO
+        message: "Nova última sequência: ${! @new_last_seq.string().slice(0, 15) }, mensagens: ${! @msgs_processadas }, request: ${! @request_duration_ms }ms"
+
+    # Métrica: Duração do request ao CouchDB (milissegundos)
+    - metric:
+        type: gauge
+        name: bcpf_couchdb_request_duration_ms
+        value: ${! @request_duration_ms }
+
+    # Métrica: Total de mensagens recebidas do CouchDB
+    - metric:
+        type: counter_by
+        name: bcpf_messages_received_total
+        value: ${! @msgs_processadas }
+
+    # Métrica: Throughput atual (mensagens por ciclo)
+    - metric:
+        type: gauge
+        name: bcpf_messages_per_cycle
+        value: ${! @msgs_processadas }
+
+    - switch:
+        - check: 'this.type() == "array" && this.length() == 0'
+          processors:
+            # === ADAPTIVE POLLING: Incrementa backoff quando sem dados ===
+            - bloblang: |
+                let current = @backoff_secs.or(0)
+                let doubled = $current * 2
+                meta new_backoff_secs = if $current == 0 { 20 } else if $doubled > 3600 { 3600 } else { $doubled }
+                meta new_backoff_until = timestamp_unix() + @new_backoff_secs
+            - cache:
+                resource: redis
+                operator: set
+                key: "bcpf_backoff_secs"
+                value: '${! @new_backoff_secs.number().catch(0) }'
+            - cache:
+                resource: redis
+                operator: set
+                key: "bcpf_backoff_until"
+                value: '${! @new_backoff_until.number().catch(0) }'
+            - log:
+                level: INFO
+                message: 'Adaptive polling: sem dados, próximo poll em ${! @new_backoff_secs.number().catch(0) }s'
+            - metric:
+                type: gauge
+                name: bcpf_adaptive_backoff_secs
+                value: ${! @new_backoff_secs.number().catch(0) }
+            - bloblang: |
+                root = deleted()
+        
+        - check: 'this.type() == "array" && this.length() > 0'
+          processors:
+            # === ADAPTIVE POLLING: Reseta backoff quando há dados (antes do unarchive, executa 1x) ===
+            - cache:
+                resource: redis
+                operator: set
+                key: "bcpf_backoff_secs"
+                value: "0"
+            - cache:
+                resource: redis
+                operator: set
+                key: "bcpf_backoff_until"
+                value: "0"
+            - log:
+                level: INFO
+                message: 'Adaptive polling: dados encontrados (${! @msgs_processadas } msgs), intervalo resetado para 10s'
+
+            - unarchive:
+                format: json_array
+
+            # Métrica: Registros individuais processados
+            - metric:
+                type: counter
+                name: bcpf_records_processed_total
+                value: "1"
+
+            - bloblang: |
+                # Processa cada change individual - estrutura completa para ClickHouse
+                meta item_seq = this.seq
+
+                # Extrai todos os campos do documento + metadados
+                let doc = this.doc
+
+                # Validação: descarta documento se cpf está vazio
+                root = if this.doc.cpfId == "" {
+                  deleted()
+                } else {
+                  {
+                    # === IDENTIFICAÇÃO ===
+                    "cpf": doc.cpfId,
+                    "nome_contribuinte": doc.nomeContribuinte.or(""),
+                    "nome_mae": doc.nomeMae.or(""),
+                    
+                    # === DADOS PESSOAIS ===
+                    "dt_nasc": doc.dtNasc.or(""),
+                    "cod_sexo": if doc.codSexo.type() == "string" && doc.codSexo != "" { doc.codSexo.number().catch(0) } else { 0 },
+                    "ano_obito": doc.anoObito.or(""),
+                    "dt_inscricao": doc.dtInscricao.or(""),
+                    "dt_ult_atualiz": doc.dtUltAtualiz.or(""),
+                    "ano_exerc": doc.anoExerc.or(""),
+                    "cod_sit_cad": if doc.codSitCad.type() == "string" && doc.codSitCad != "" { doc.codSitCad.number().catch(0) } else { 0 },
+                    
+                    # === NATURALIDADE ===
+                    "cod_mun_nat": if doc.codMunNat.type() == "string" && doc.codMunNat != "" { doc.codMunNat.number().catch(0) } else { 0 },
+                    "uf_mun_nat": doc.ufMunNat.or(""),
+                    "cod_nat_ocup": if doc.codNatOcup.type() == "string" && doc.codNatOcup != "" { doc.codNatOcup.number().catch(0) } else { 0 },
+                    
+                    # === ENDEREÇO ===
+                    "tipo_logradouro": doc.tipoLogradouro.or(""),
+                    "logradouro": doc.logradouro.or(""),
+                    "nro_logradouro": doc.nroLogradouro.or(""),
+                    "complemento": doc.complemento.or(""),
+                    "bairro": doc.bairro.or(""),
+                    "cep": doc.cep.or(""),
+                    "cod_mun_domic": if doc.codMunDomic.type() == "string" && doc.codMunDomic != "" { doc.codMunDomic.number().catch(0) } else { 0 },
+                    "uf_mun_domic": doc.ufMunDomic.or(""),
+                    
+                    # === CONTATO ===
+                    "telefone": doc.telefone.or(""),
+                    "email": doc.email.or(""),
+                    
+                    # === OCUPAÇÃO ===
+                    "cod_ocup": if doc.codOcup.type() == "string" && doc.codOcup != "" { doc.codOcup.number().catch(0) } else { 0 },
+                    
+                    # === INDICADORES ===
+                    "ind_estrangeiro": if doc.indEstrangeiro.type() == "string" && doc.indEstrangeiro != "" { doc.indEstrangeiro.number().catch(0) } else { 0 },
+                    "ind_res_ext": if doc.indResExt.type() == "string" && doc.indResExt != "" { doc.indResExt.number().catch(0) } else { 0 },
+                    
+                    # === METADADOS CDC ===
+                    "seq": this.seq,
+                    "rev": doc._rev.split("-").index(0).catch("0").number().catch(0),
+                    
+                    # === TIMESTAMPS ===
+                    "dh_extracao": timestamp_unix()
+                  }
+                }
+
+output:
+  label: bcpf_output
+  broker:
+    pattern: fan_out_sequential
+    outputs:
+      - label: "bcpf_sql_insert_main"
+        sql_insert:
+          driver: clickhouse
+          dsn: "clickhouse://${CLICKHOUSE_USER}:${CLICKHOUSE_PASSWORD}@${CLICKHOUSE_HOST}:${CLICKHOUSE_PORT}"
+          conn_max_idle: ${CLICKHOUSE_MAX_IDLE_CONNS:1}
+          conn_max_open: ${CLICKHOUSE_MAX_OPEN_CONNS:1}
+          max_in_flight: 1
+          table: ${BCADASTROS_CPF_HISTORICO}
+          init_statement: |
+            CREATE TABLE IF NOT EXISTS ${BCADASTROS_CPF_HISTORICO}
+            (
+              -- IDENTIFICAÇÃO
+              cpf String,
+              nome_contribuinte String DEFAULT '',
+              nome_mae String DEFAULT '',
+              
+              -- DADOS PESSOAIS
+              dt_nasc String DEFAULT '',
+              cod_sexo UInt8 DEFAULT 0,
+              ano_obito String DEFAULT '',
+              dt_inscricao String DEFAULT '',
+              dt_ult_atualiz String DEFAULT '',
+              ano_exerc String DEFAULT '',
+              cod_sit_cad UInt8 DEFAULT 0,
+              
+              -- NATURALIDADE
+              cod_mun_nat UInt16 DEFAULT 0,
+              uf_mun_nat LowCardinality(String) DEFAULT '',
+              cod_nat_ocup UInt16 DEFAULT 0,
+              
+              -- ENDEREÇO
+              tipo_logradouro LowCardinality(String) DEFAULT '',
+              logradouro String DEFAULT '',
+              nro_logradouro String DEFAULT '',
+              complemento String DEFAULT '',
+              bairro String DEFAULT '',
+              cep String DEFAULT '',
+              cod_mun_domic UInt16 DEFAULT 0,
+              uf_mun_domic LowCardinality(String) DEFAULT '',
+              
+              -- CONTATO
+              telefone String DEFAULT '',
+              email String DEFAULT '',
+              
+              -- OCUPAÇÃO
+              cod_ocup UInt16 DEFAULT 0,
+              
+              -- INDICADORES
+              ind_estrangeiro UInt8 DEFAULT 0,
+              ind_res_ext UInt8 DEFAULT 0,
+              
+              -- METADADOS CDC
+              seq String DEFAULT '',
+              rev UInt16 DEFAULT 0,
+              
+              -- TIMESTAMPS
+              dh_extracao DateTime,
+
+              -- ÍNDICES
+              INDEX idx_dh_extracao dh_extracao TYPE minmax GRANULARITY 4
+            )
+            ENGINE = ReplacingMergeTree(dh_extracao)
+            ORDER BY (cpf, rev)
+            PARTITION BY toYYYYMM(dh_extracao)
+            SETTINGS storage_policy = 'ds3_cold', index_granularity = 8192;
+          columns:
+            - cpf
+            - nome_contribuinte
+            - nome_mae
+            - dt_nasc
+            - cod_sexo
+            - ano_obito
+            - dt_inscricao
+            - dt_ult_atualiz
+            - ano_exerc
+            - cod_sit_cad
+            - cod_mun_nat
+            - uf_mun_nat
+            - cod_nat_ocup
+            - tipo_logradouro
+            - logradouro
+            - nro_logradouro
+            - complemento
+            - bairro
+            - cep
+            - cod_mun_domic
+            - uf_mun_domic
+            - telefone
+            - email
+            - cod_ocup
+            - ind_estrangeiro
+            - ind_res_ext
+            - seq
+            - rev
+            - dh_extracao
+          args_mapping: |
+            [
+              this.cpf,
+              this.nome_contribuinte,
+              this.nome_mae,
+              this.dt_nasc,
+              this.cod_sexo,
+              this.ano_obito,
+              this.dt_inscricao,
+              this.dt_ult_atualiz,
+              this.ano_exerc,
+              this.cod_sit_cad,
+              this.cod_mun_nat,
+              this.uf_mun_nat,
+              this.cod_nat_ocup,
+              this.tipo_logradouro,
+              this.logradouro,
+              this.nro_logradouro,
+              this.complemento,
+              this.bairro,
+              this.cep,
+              this.cod_mun_domic,
+              this.uf_mun_domic,
+              this.telefone,
+              this.email,
+              this.cod_ocup,
+              this.ind_estrangeiro,
+              this.ind_res_ext,
+              this.seq,
+              this.rev,
+              this.dh_extracao
+            ]
+          batching:
+            count: ${COUCHDB_LIMIT}
+            period: 10s
+        processors:
+          # Métrica: Registros inseridos no ClickHouse (1 por mensagem)
+          - metric:
+              type: counter
+              name: bcpf_clickhouse_inserts_total
+              labels:
+                table: "${BCADASTROS_CPF_HISTORICO}"
+            
+      - label: "bcpf_cache_last_seq"
+        cache:
+          target: redis
+          key: "seq_bcpf"
+        processors:
+          # Grava @new_last_seq no Redis apenas na última mensagem do batch.
+          # Usa batch_index() para identificar a última mensagem de forma confiável,
+          # evitando problemas com CouchDB clusterizado onde last_seq != result.seq.
+          - mapping: |
+              root = if @new_last_seq != null && batch_index() == batch_size() - 1 {
+                @new_last_seq
+              } else {
+                deleted()
+              }
+
+          # Calcula tempo total do ciclo e tempo de escrita no ClickHouse
+          - bloblang: |
+              meta cycle_duration_ms = (timestamp_unix_nano() - @request_start) / 1000000
+              meta write_duration_ms = ((timestamp_unix_nano() - @request_start) / 1000000) - @request_duration_ms
+
+          - log:
+              level: INFO
+              message: 'Ciclo CPF completo: total=${! @cycle_duration_ms }ms, fetch=${! @request_duration_ms }ms, write=${! @write_duration_ms }ms, msgs=${! @msgs_processadas }'
+
+          # Métrica: Tempo total do ciclo (fetch + processamento + insert)
+          - metric:
+              type: gauge
+              name: bcpf_cycle_duration_ms
+              value: ${! @cycle_duration_ms }
+
+          # Métrica: Tempo de escrita no ClickHouse (total - fetch)
+          - metric:
+              type: gauge
+              name: bcpf_write_duration_ms
+              value: ${! @write_duration_ms }
+
+          - log:
+              level: DEBUG
+              message: 'Atualizando sequência CPF no Redis para: ${! @new_last_seq.string().slice(0, 15) }'
+          
+          # Métrica: Última sequência atualizada (timestamp)
+          - metric:
+              type: gauge
+              name: bcpf_last_sequence_updated
+              value: "1"
+          
+          # Métrica: Última sequência processada (valor numérico)
+          - metric:
+              type: gauge
+              name: bcpf_last_sequence_number
+              value: ${! @new_last_seq.string().split("-").index(0).number().catch(0) }

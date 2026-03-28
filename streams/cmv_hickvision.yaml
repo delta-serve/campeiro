@@ -1,0 +1,91 @@
+input:
+  kafka:
+    addresses: [ "${CMV_KAFKA_INPUT_ADDRESSES}" ]
+    topics: ["${CMV_KAFKA_INPUT_TOPIC}"]
+    tls:
+      enabled: true
+      skip_cert_verify: false
+    sasl:
+      mechanism: PLAIN
+      user: "${CMV_KAFKA_INPUT_USER}"
+      password: "${CMV_KAFKA_INPUT_PASSWORD}"
+    consumer_group: "${CMV_KAFKA_INPUT_CONSUMER_GROUP}"
+pipeline:
+  processors:
+    # Métrica: Mensagens recebidas do Kafka
+    - metric:
+        type: counter
+        name: cmv_hik_messages_received_total
+        labels:
+          source: "kafka"
+        value: "1"
+    
+    # Filtrar mensagens com placa "Unknown"
+    - bloblang: |
+        root = if this.placa == "Unknown" {
+          deleted()
+        } else {
+          this
+        }
+      label: "cmv_hik_filter_unknown"
+    
+    # Métrica: Mensagens com placa válida (não "Unknown")
+    - metric:
+        type: counter
+        name: cmv_hik_messages_valid_total
+        labels:
+          filter: "valid_plate"
+        value: "1"
+        
+    - bloblang: |
+        root = {
+          "idcaptura": "hik",
+          "latitude": this.camera.latitude,
+          "longitude": this.camera.longitude,
+          "nome_local": this.camera.numero,
+          "caddata": this.dataHoraTz.ts_strftime("%Y%m%d%H%M%S"),
+          "imagem": this.imagem.imgVeiculo,  # Apenas os 10 primeiros caracteres
+          "placa": this.placa
+        }
+
+    - branch:
+        processors:
+          - sql_select:
+              driver: clickhouse
+              dsn: "clickhouse://${CLICKHOUSE_USER}:${CLICKHOUSE_PASSWORD}@${CLICKHOUSE_HOST}:${CLICKHOUSE_PORT}"
+              conn_max_idle: ${CLICKHOUSE_MAX_IDLE_CONNS:1}
+              conn_max_open: ${CLICKHOUSE_MAX_OPEN_CONNS:1}
+              table: lpr.eqps_hikvision
+              columns: ["*"]
+              where: "nome = ?"
+              args_mapping: '[this.nome_local]'
+        result_map: |
+          root.cameraid = this.0.id
+          root.comentario_local = this.0.desc
+      label: "cmv_hik_enriquecimento"
+    
+    # Métrica: Mensagens enriquecidas com dados do ClickHouse
+    - metric:
+        type: counter
+        name: cmv_hik_messages_enriched_total
+        labels:
+          source: "clickhouse"
+        value: "1"
+
+
+output:
+  label: cmv_hik_output
+  processors:
+    # Métrica: Mensagens enviadas ao Kafka output
+    - metric:
+        type: counter
+        name: cmv_hik_kafka_output_total
+        labels:
+          destination: "kafka"
+        value: "1"
+  kafka:
+    addresses: [ "${CMV_KAFKA_OUTPUT_ADDRESSES}" ]
+    topic: "${CMV_KAFKA_OUTPUT_TOPIC}"
+    batching:
+      count: ${CMV_KAFKA_OUTPUT_BATCH_COUNT:100}
+      period: ${CMV_KAFKA_OUTPUT_BATCH_PERIOD:5s}

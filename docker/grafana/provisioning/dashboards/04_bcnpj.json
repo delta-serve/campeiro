@@ -1,0 +1,616 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "panels": [
+    {
+      "title": "Total Mensagens Recebidas",
+      "type": "stat",
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "bcnpj_messages_received_total",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Total Inserts (todas tabelas)",
+      "type": "stat",
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "bcnpj_matriz_inserts_total + bcnpj_socios_inserts_total + bcnpj_estabelecimento_inserts_total + bcnpj_sucessao_inserts_total + bcnpj_desconhecido_inserts_total",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Taxa Recepção (msg/s)",
+      "type": "stat",
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "rate(bcnpj_messages_received_total[1m])",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "short",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 5
+              },
+              {
+                "color": "green",
+                "value": 20
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Taxa Inserts (rec/s)",
+      "type": "stat",
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "rate(bcnpj_matriz_inserts_total[1m]) + rate(bcnpj_socios_inserts_total[1m]) + rate(bcnpj_estabelecimento_inserts_total[1m]) + rate(bcnpj_sucessao_inserts_total[1m]) + rate(bcnpj_desconhecido_inserts_total[1m])",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "short",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 10
+              },
+              {
+                "color": "green",
+                "value": 50
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Total Inserido no ClickHouse",
+      "type": "stat",
+      "gridPos": {
+        "h": 5,
+        "w": 12,
+        "x": 0,
+        "y": 5
+      },
+      "targets": [
+        {
+          "expr": "bcnpj_matriz_inserts_total + bcnpj_socios_inserts_total + bcnpj_estabelecimento_inserts_total + bcnpj_sucessao_inserts_total + bcnpj_desconhecido_inserts_total",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "textMode": "value",
+        "graphMode": "area",
+        "colorMode": "value"
+      }
+    },
+    {
+      "title": "Taxa de Sucesso (%)",
+      "type": "stat",
+      "gridPos": {
+        "h": 5,
+        "w": 12,
+        "x": 12,
+        "y": 5
+      },
+      "targets": [
+        {
+          "expr": "(bcnpj_matriz_inserts_total + bcnpj_socios_inserts_total + bcnpj_estabelecimento_inserts_total + bcnpj_sucessao_inserts_total + bcnpj_desconhecido_inserts_total) / bcnpj_messages_received_total * 100",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "percent",
+          "decimals": 2,
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 90
+              },
+              {
+                "color": "green",
+                "value": 99
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "textMode": "value",
+        "graphMode": "none",
+        "colorMode": "background"
+      }
+    },
+    {
+      "title": "Throughput Atual (mensagens por ciclo)",
+      "type": "gauge",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 10
+      },
+      "targets": [
+        {
+          "expr": "bcnpj_messages_per_cycle",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "green",
+                "value": 100
+              }
+            ]
+          },
+          "min": 0,
+          "max": 300
+        }
+      },
+      "options": {
+        "showThresholdLabels": true,
+        "showThresholdMarkers": true
+      }
+    },
+    {
+      "title": "Distribuição de Inserts por Tabela",
+      "type": "piechart",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 10
+      },
+      "targets": [
+        {
+          "expr": "bcnpj_matriz_inserts_total",
+          "legendFormat": "Matriz",
+          "refId": "A"
+        },
+        {
+          "expr": "bcnpj_socios_inserts_total",
+          "legendFormat": "Sócios",
+          "refId": "B"
+        },
+        {
+          "expr": "bcnpj_estabelecimento_inserts_total",
+          "legendFormat": "Estabelecimento",
+          "refId": "C"
+        },
+        {
+          "expr": "bcnpj_sucessao_inserts_total",
+          "legendFormat": "Sucessão",
+          "refId": "D"
+        },
+        {
+          "expr": "bcnpj_desconhecido_inserts_total",
+          "legendFormat": "Desconhecido",
+          "refId": "E"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        },
+        "pieType": "pie"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          }
+        }
+      }
+    },
+    {
+      "title": "Inserts por Tabela (acumulado)",
+      "type": "bargauge",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "targets": [
+        {
+          "expr": "bcnpj_matriz_inserts_total",
+          "legendFormat": "Matriz",
+          "refId": "A"
+        },
+        {
+          "expr": "bcnpj_socios_inserts_total",
+          "legendFormat": "Sócios",
+          "refId": "B"
+        },
+        {
+          "expr": "bcnpj_estabelecimento_inserts_total",
+          "legendFormat": "Estabelecimento",
+          "refId": "C"
+        },
+        {
+          "expr": "bcnpj_sucessao_inserts_total",
+          "legendFormat": "Sucessão",
+          "refId": "D"
+        },
+        {
+          "expr": "bcnpj_desconhecido_inserts_total",
+          "legendFormat": "Desconhecido",
+          "refId": "E"
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          }
+        }
+      }
+    },
+    {
+      "title": "Taxa de Inserts por Tabela (rec/s)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 26
+      },
+      "targets": [
+        {
+          "expr": "rate(bcnpj_matriz_inserts_total[1m])",
+          "legendFormat": "Matriz",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(bcnpj_socios_inserts_total[1m])",
+          "legendFormat": "Sócios",
+          "refId": "B"
+        },
+        {
+          "expr": "rate(bcnpj_estabelecimento_inserts_total[1m])",
+          "legendFormat": "Estabelecimento",
+          "refId": "C"
+        },
+        {
+          "expr": "rate(bcnpj_sucessao_inserts_total[1m])",
+          "legendFormat": "Sucessão",
+          "refId": "D"
+        },
+        {
+          "expr": "rate(bcnpj_desconhecido_inserts_total[1m])",
+          "legendFormat": "Desconhecido",
+          "refId": "E"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "min",
+            "max",
+            "mean",
+            "last"
+          ]
+        }
+      }
+    },
+    {
+      "title": "Taxa de Recepção vs Total Inserts",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 34
+      },
+      "targets": [
+        {
+          "expr": "rate(bcnpj_messages_received_total[1m])",
+          "legendFormat": "Mensagens Recebidas/s",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(bcnpj_matriz_inserts_total[1m]) + rate(bcnpj_socios_inserts_total[1m]) + rate(bcnpj_estabelecimento_inserts_total[1m]) + rate(bcnpj_sucessao_inserts_total[1m]) + rate(bcnpj_desconhecido_inserts_total[1m])",
+          "legendFormat": "Total Inserts/s",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 20,
+            "showPoints": "auto"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "values": [
+            "value",
+            "min",
+            "max",
+            "mean"
+          ]
+        }
+      }
+    },
+    {
+      "title": "Throughput por Ciclo - Histórico",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 34
+      },
+      "targets": [
+        {
+          "expr": "bcnpj_messages_per_cycle",
+          "legendFormat": "Mensagens/ciclo",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 30,
+            "showPoints": "auto"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "values": [
+            "value",
+            "min",
+            "max",
+            "mean"
+          ]
+        }
+      }
+    },
+    {
+      "title": "Top 3 Tabelas - Comparativo",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 42
+      },
+      "targets": [
+        {
+          "expr": "topk(3, rate(bcnpj_matriz_inserts_total[5m]))",
+          "legendFormat": "Matriz",
+          "refId": "A"
+        },
+        {
+          "expr": "topk(3, rate(bcnpj_socios_inserts_total[5m]))",
+          "legendFormat": "Sócios",
+          "refId": "B"
+        },
+        {
+          "expr": "topk(3, rate(bcnpj_estabelecimento_inserts_total[5m]))",
+          "legendFormat": "Estabelecimento",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "custom": {
+            "lineWidth": 3,
+            "fillOpacity": 5,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "values": [
+            "value",
+            "mean"
+          ]
+        }
+      }
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 38,
+  "tags": [
+    "benthos",
+    "bento",
+    "streams",
+    "cnpj",
+    "bcadastros"
+  ],
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "title": "Bcadastros - CNPJ",
+  "uid": "bcnpj_dashboard",
+  "version": 1
+}

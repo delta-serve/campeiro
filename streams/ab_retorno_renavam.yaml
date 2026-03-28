@@ -1,0 +1,386 @@
+input:
+  label: ab_retorno_renavam_input
+  kafka:
+    addresses: ["${AB_RETORNO_RENAVAM_ADDRESSES}"]
+    topics: ["${AB_RETORNO_RENAVAM_TOPIC}"]
+    tls:
+      enabled: true
+      skip_cert_verify: false
+    sasl:
+      mechanism: PLAIN
+      user: "${AB_RETORNO_RENAVAM_USER}"
+      password: "${AB_RETORNO_RENAVAM_PASSWORD}"
+    consumer_group: "${AB_RETORNO_RENAVAM_CONSUMER_GROUP}"
+  processors:
+    # Captura timestamp de entrada no Bento para cálculo de latência de processamento interno
+    - bloblang: 'meta input_timestamp_ns = timestamp_unix_nano()'
+
+pipeline:
+  processors:
+    # Salva evento bruto antes de qualquer transformação
+    - bloblang: 'meta raw_event = content().string()'
+
+    # Captura timestamp de recebimento para cálculo de latência de entrega
+    - bloblang: 'meta data_recebimento_unix = this.passagem.dataRecebimento.ts_tz("UTC").ts_unix().catch(0)'
+
+    - label: ab_retorno_renavam_bloblang
+      bloblang: |
+        root = {
+          "placa": this.passagem.placa,
+          "data_passagem": this.passagem.dataPassagem.ts_tz("UTC").ts_format("2006-01-02T15:04:05Z07:00"),
+          "orgao": this.passagem.orgao,
+          "empresa": this.passagem.empresa,
+          "equipamento": this.passagem.equipamentoCodigo,
+          "status": this.status,
+          "veiculo": if this.status == "OK" {
+            {
+              "tipo_veiculo": this.veiculo.tipoVeiculo,
+              "marca_modelo": this.veiculo.marcaModelo,
+              "cor": this.veiculo.cor,
+              "ano_fabricacao": this.veiculo.anoFabricacao,
+              "ano_modelo": this.veiculo.anoModelo,
+              "municipio_emplacamento": this.veiculo.municipioEmplacamento,
+              "uf_emplacamento": this.veiculo.ufEmplacamento,
+              "restricao_roubo_furto": this.veiculo.restricaoRoubo_Furto
+            }
+          } else {
+            {}
+          },
+          "destination": match this.passagem.orgao {
+            "MAUA-SP" => "sentry",
+            "OSASCO/SP" => "sentry",
+            "SIMTRANS-VCA-BA" => "simtrans",
+            "SSP-NAVEGANTES/SC" => "navegantes",
+            "SSP/GO" => "sspgo",
+            _ => "outros"
+          }
+        }
+
+    # Pré-calcula valores reutilizados em múltiplas métricas (avaliados uma única vez por mensagem)
+    # Elimina reavaliação redundante de expressões nos labels dos processadores metric
+    - bloblang: |
+        meta m_status       = this.status
+        meta m_destination  = this.destination
+        meta m_orgao        = this.orgao
+        meta m_empresa      = this.empresa.or("DESCONHECIDA")
+        meta m_equipamento  = this.equipamento.or("DESCONHECIDO")
+        meta m_tipo_veiculo = if this.status == "OK" { this.veiculo.tipo_veiculo.or("DESCONHECIDO") } else { "N/A" }
+        meta m_restricao    = if this.status == "OK" { if this.veiculo.restricao_roubo_furto == true { "SIM" } else { "NAO" } } else { "N/A" }
+        meta m_latency_ns            = ((now().ts_unix() - @data_recebimento_unix.or(0)) * 1000000000).string()
+        meta m_processing_latency_ns = (timestamp_unix_nano() - @input_timestamp_ns.or(0)).string()
+        root = this
+
+    # Métrica: Total de mensagens enviadas por destino
+    - metric:
+        name: renavam_messages_sent_total
+        type: counter
+        labels:
+          destination: ${! @m_destination }
+        value: "1"
+
+    # Métrica MASTER: status × destination (~20 séries fixas, não cresce com novos órgãos/empresas)
+    # orgao e empresa foram extraídos para métricas dedicadas de cardinalidade controlada
+    - metric:
+        name: renavam_messages_master
+        type: counter
+        labels:
+          status: ${! @m_status }
+          destination: ${! @m_destination }
+        value: "1"
+
+    # Métrica: Contagem por órgão (~1 série por órgão, cresce linearmente)
+    - metric:
+        name: renavam_messages_by_orgao
+        type: counter
+        labels:
+          orgao: ${! @m_orgao }
+        value: "1"
+
+    # Métrica: Contagem por empresa (~1 série por empresa, cresce linearmente)
+    - metric:
+        name: renavam_messages_by_empresa
+        type: counter
+        labels:
+          empresa: ${! @m_empresa }
+        value: "1"
+
+    # Métrica: Distribuição por órgão e status
+    # Substitui renavam_messages_by_equipamento_status (alta cardinalidade: 4.605 equipamentos × status = 6.105 séries)
+    # ~65 órgãos x 3 status = ~195 séries (redução de 97%)
+    - metric:
+        name: renavam_messages_by_orgao_status
+        type: counter
+        labels:
+          orgao: ${! @m_orgao }
+          status: ${! @m_status }
+        value: "1"
+
+    # Métrica: Distribuição por tipo de veículo (apenas quando status=OK)
+    # Simplificada: orgao/empresa disponíveis via renavam_messages_by_orgao/_by_empresa
+    - metric:
+        name: renavam_messages_by_tipo_veiculo
+        type: counter
+        labels:
+          tipo_veiculo: ${! @m_tipo_veiculo }
+        value: "1"
+
+    # Métrica: Veículos com restrição de roubo/furto
+    - metric:
+        name: renavam_veiculos_restricao_roubo
+        type: counter
+        labels:
+          restricao: ${! @m_restricao }
+          orgao: ${! @m_orgao }
+        value: "1"
+
+    # === LATÊNCIA DE ENTREGA ===
+    # Tempo entre dataRecebimento e o momento atual (processamento no pipeline)
+    # Exposto como histograma Prometheus via use_histogram_timing: true
+    # Usa @m_latency_ns pré-calculado — mesmo instante de now() para todos os histogramas
+    - metric:
+        name: renavam_delivery_latency_ns
+        type: timing
+        labels:
+          destination: ${! @m_destination }
+        value: ${! @m_latency_ns }
+
+    # === HEALTH CHECK PERIÓDICO ===
+    # Log de status a cada 15 minutos (quando timestamp_unix % 900 == 0)
+    # Amostragem adicional (1/8) para evitar logs duplicados no mesmo segundo
+    # Não afeta o fluxo de mensagens (branch + result_map deleted)
+    - branch:
+        request_map: |
+          # Condição temporal (a cada 15 min) + amostragem aleatória (reduz de ~7 logs para ~1)
+          # random_int(0,7) == 0 tem probabilidade 1/8 (~12.5%)
+          root = if now().ts_unix() % 900 == 0 && random_int(min: 0, max: 7) == 0 { 
+            this 
+          } else { 
+            deleted() 
+          }
+        processors:
+          # Log estruturado com informações de saúde do pipeline
+          - log:
+              level: INFO
+              fields_mapping: |
+                root.health_check = {
+                  "pipeline": "ab_retorno_renavam",
+                  "timestamp": now().format_timestamp("2006-01-02 15:04:05", "America/Sao_Paulo"),
+                  "timestamp_unix": now().ts_unix(),
+                  "outputs": {
+                    "total": 5,
+                     "active": ["eventos_kafka", "sentry_rabbitmq", "protenet_http", "simtrans_kafka", "sspgo_kafka"],
+                    "destinations": {
+                      "kafka_archive": "ab-retorno-renavam-eventos (raw data)",
+                      "rabbitmq_sentry": "RabbitMQ SENTRY (empresa MULTIWAY)",
+                      "http_protenet": "HTTP PROTENET (empresa PROTENET)",
+                      "kafka_simtrans": "Kafka SIMTRANS-VCA-BA (empresa SIMTRANS_VCA)",
+                       "kafka_sspgo": "Kafka SSP/GO (orgao SSP/GO)"
+                    }
+                  },
+                  "empresas_suportadas": ["SENTRY (MULTIWAY)", "PROTENET"],
+                  "protocolos": ["Kafka", "AMQP 0.9", "HTTP"],
+                  "status": "HEALTHY"
+                }
+              message: |
+                ========================================
+                [HEALTH CHECK] Pipeline AB Retorno RENAVAM
+                Status: OPERACIONAL ✓
+                Outputs Ativos: 5/5
+                 Empresas: 2 (SENTRY, PROTENET)
+                 Protocolos: 3 (Kafka, AMQP, HTTP)
+                ========================================
+        result_map: 'root = deleted()'  # Não modifica mensagem original
+
+    # Remove campo auxiliar antes do envio
+    - bloblang: |
+        root = this.without("destination")
+
+output:
+  broker:
+    pattern: fan_out
+    outputs:
+      # Envia evento bruto para tópico 'eventos'
+      - label: ab_retorno_renavam_output_eventos
+        kafka:
+          addresses: [ "${DEV_KAFKA_BROKER}" ]
+          topic: "eventos"
+          key: ${! this.placa }
+          batching:
+            count: ${CMV_KAFKA_OUTPUT_BATCH_COUNT:100}
+            period: ${CMV_KAFKA_OUTPUT_BATCH_PERIOD:5s}
+        processors:
+          - bloblang: 'root = @raw_event.parse_json()'
+          - metric:
+              name: renavam_eventos_raw_sent_total
+              type: counter
+              value: "1"
+
+      # Envia evento processado por destino
+      - label: ab_retorno_renavam_output_switch
+        switch:
+          cases:
+            # MULTIWAY (SENTRY) - gerencia Mauá-SP e Osasco-SP via RabbitMQ
+            - check: this.empresa == "MULTIWAY"
+              output:
+                label: ab_retorno_renavam_output_sentry
+                broker:
+                  pattern: fan_out
+                  outputs:
+                    - amqp_0_9:
+                        urls:
+                          - "amqps://${RABBITMQ_SENTRY_USER}:${RABBITMQ_SENTRY_PASSWORD}@${RABBITMQ_SENTRY_HOST}:${RABBITMQ_SENTRY_PORT}${RABBITMQ_SENTRY_VHOST}"
+                        exchange: "${RABBITMQ_SENTRY_EXCHANGE}"
+                        exchange_declare:
+                          enabled: false
+                        key: "${RABBITMQ_SENTRY_ROUTING_KEY}"
+                        content_type: "application/json"
+                        content_encoding: "utf-8"
+                        persistent: true
+                        tls:
+                          enabled: true
+                        max_in_flight: 64
+                        timeout: "${RABBITMQ_SENTRY_TIMEOUT:30s}"
+                      processors:
+                        - metric:
+                            name: renavam_rabbitmq_sentry_sent_total
+                            type: counter
+                            value: "1"
+                        - metric:
+                            name: renavam_output_delivery_latency_ns
+                            type: timing
+                            labels:
+                              output: sentry_rabbitmq
+                            value: ${! ((now().ts_unix() - @data_recebimento_unix.or(0)) * 1000000000).string() }
+                        - metric:
+                            name: renavam_processing_latency_ns
+                            type: timing
+                            labels:
+                              output: sentry_rabbitmq
+                            value: ${! @m_processing_latency_ns }
+
+            - check: this.orgao == "SIMTRANS-VCA-BA"
+              output:
+                label: ab_retorno_renavam_output_simtrans
+                kafka:
+                  addresses: [ "${DEV_KAFKA_BROKER}" ]
+                  topic: "simtrans"
+                  key: ${! this.placa }
+                  batching:
+                    count: ${CMV_KAFKA_OUTPUT_BATCH_COUNT:100}
+                    period: ${CMV_KAFKA_OUTPUT_BATCH_PERIOD:5s}
+                processors:
+                  - metric:
+                      name: renavam_output_delivery_latency_ns
+                      type: timing
+                      labels:
+                        output: simtrans_kafka
+                      value: ${! ((now().ts_unix() - @data_recebimento_unix.or(0)) * 1000000000).string() }
+                  - metric:
+                      name: renavam_processing_latency_ns
+                      type: timing
+                      labels:
+                        output: simtrans_kafka
+                      value: ${! @m_processing_latency_ns }
+
+            - check: this.empresa == "PROTENET"
+              output:
+                label: ab_retorno_renavam_output_navegantes
+                http_client:
+                  url: "${HTTP_OUTPUT_NAVEGANTES_URL}"
+                  verb: POST
+                  headers:
+                    Content-Type: application/json
+                    token: "${HTTP_OUTPUT_NAVEGANTES_TOKEN:0}"
+                  timeout: "${HTTP_OUTPUT_NAVEGANTES_TIMEOUT:30s}"
+                  retries: ${HTTP_OUTPUT_NAVEGANTES_RETRIES:3}
+                  retry_period: "1s"
+                  max_retry_backoff: "30s"
+                  drop_on: [400, 401, 403, 404, 405, 422]
+                  batching:
+                    count: ${HTTP_OUTPUT_NAVEGANTES_BATCH_COUNT:100}
+                    period: "${HTTP_OUTPUT_NAVEGANTES_BATCH_PERIOD:5s}"
+                    processors:
+                      - archive:
+                          format: json_array
+                      - metric:
+                          name: renavam_http_navegantes_sent_total
+                          type: counter
+                          value: "1"
+                      - metric:
+                          name: renavam_output_delivery_latency_ns
+                          type: timing
+                          labels:
+                            output: navegantes_http
+                          value: ${! ((now().ts_unix() - @data_recebimento_unix.or(0)) * 1000000000).string() }
+                      - metric:
+                          name: renavam_processing_latency_ns
+                          type: timing
+                          labels:
+                            output: navegantes_http
+                          value: ${! @m_processing_latency_ns }
+
+            # Mensagens não roteadas explicitamente: amostragem de 2%
+            # ~98% das mensagens são descartadas para reduzir I/O no Kafka
+            # random_int(0, 49) == 0 → probabilidade 1/50 = 2%
+            - output:
+                label: ab_retorno_renavam_output_outros
+                kafka:
+                  addresses: [ "${DEV_KAFKA_BROKER}" ]
+                  topic: "outros"
+                  key: ${! this.placa }
+                  batching:
+                    count: ${CMV_KAFKA_OUTPUT_BATCH_COUNT:100}
+                    period: ${CMV_KAFKA_OUTPUT_BATCH_PERIOD:5s}
+                processors:
+                  - bloblang: |
+                      # Amostragem 2%: descarta ~98% das mensagens não roteadas
+                      root = if random_int(min: 0, max: 49) == 0 {
+                        this
+                      } else {
+                        deleted()
+                      }
+
+      # SSP/GO - Kafka SASL_PLAINTEXT
+      - label: ab_retorno_renavam_output_sspgo
+        switch:
+          cases:
+            - check: this.empresa == "SSP/GO"
+              output:
+                label: ab_retorno_renavam_kafka_sspgo
+                kafka:
+                  addresses: ["${KAFKA_SSPGO_BROKER_URLS}"]
+                  topic: "${KAFKA_SSPGO_TOPIC}"
+                  key: ${! this.placa }
+                  sasl:
+                    mechanism: ${KAFKA_SSPGO_SASL_MECHANISM}
+                    user: "${KAFKA_SSPGO_SASL_USERNAME}"
+                    password: "${KAFKA_SSPGO_SASL_PASSWORD}"
+                  batching:
+                    count: ${CMV_KAFKA_OUTPUT_BATCH_COUNT:100}
+                    period: ${CMV_KAFKA_OUTPUT_BATCH_PERIOD:5s}
+                    processors:
+                      - metric:
+                          name: renavam_kafka_sspgo_sent_total
+                          type: counter
+                          value: "1"
+                      - metric:
+                          name: renavam_output_delivery_latency_ns
+                          type: timing
+                          labels:
+                            output: sspgo_kafka
+                          value: ${! ((now().ts_unix() - @data_recebimento_unix.or(0)) * 1000000000).string() }
+                      - metric:
+                          name: renavam_processing_latency_ns
+                          type: timing
+                          labels:
+                            output: sspgo_kafka
+                          value: ${! @m_processing_latency_ns }
+            - output:
+                drop: {}
+
+      # Roteamento por empresa (adicione cases conforme necessário)
+      # Para ativar, substitua o drop abaixo por um switch com pelo menos 2 cases:
+      #   check: this.empresa == "NOME_DA_EMPRESA"
+      #   output: kafka ou http_client
+      - label: ab_retorno_renavam_output_empresa
+        drop: {}
