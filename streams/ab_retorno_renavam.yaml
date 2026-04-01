@@ -171,13 +171,13 @@ pipeline:
                      "active": ["eventos_kafka", "sentry_rabbitmq", "protenet_http", "simtrans_kafka", "sspgo_kafka"],
                     "destinations": {
                       "kafka_archive": "ab-retorno-renavam-eventos (raw data)",
-                      "rabbitmq_sentry": "RabbitMQ SENTRY (empresa MULTIWAY)",
+                       "rabbitmq_sentry": "RabbitMQ SENTRY (empresa MULTIWAY ou 7LAN)",
                       "http_protenet": "HTTP PROTENET (empresa PROTENET)",
                       "kafka_simtrans": "Kafka SIMTRANS-VCA-BA (empresa SIMTRANS_VCA)",
                        "kafka_sspgo": "Kafka SSP/GO (orgao SSP/GO)"
                     }
                   },
-                  "empresas_suportadas": ["SENTRY (MULTIWAY)", "PROTENET"],
+                  "empresas_suportadas": ["SENTRY (MULTIWAY, 7LAN)", "PROTENET"],
                   "protocolos": ["Kafka", "AMQP 0.9", "HTTP"],
                   "status": "HEALTHY"
                 }
@@ -186,7 +186,7 @@ pipeline:
                 [HEALTH CHECK] Pipeline AB Retorno RENAVAM
                 Status: OPERACIONAL ✓
                 Outputs Ativos: 5/5
-                 Empresas: 2 (SENTRY, PROTENET)
+                 Empresas: 2 (SENTRY[MULTIWAY+7LAN], PROTENET)
                  Protocolos: 3 (Kafka, AMQP, HTTP)
                 ========================================
         result_map: 'root = deleted()'  # Não modifica mensagem original
@@ -219,8 +219,8 @@ output:
       - label: ab_retorno_renavam_output_switch
         switch:
           cases:
-            # MULTIWAY (SENTRY) - gerencia Mauá-SP e Osasco-SP via RabbitMQ
-            - check: this.empresa == "MULTIWAY"
+            # MULTIWAY e 7LAN (SENTRY) - gerenciam Mauá-SP e Osasco-SP via RabbitMQ
+            - check: this.empresa == "MULTIWAY" || this.empresa == "7LAN"
               output:
                 label: ab_retorno_renavam_output_sentry
                 broker:
