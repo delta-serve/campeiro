@@ -1,7 +1,8 @@
+name: ds-bento-streams
+
 services:
   redpanda:
     image: docker.redpanda.com/redpandadata/redpanda:v23.2.19
-    container_name: redpanda
     restart: unless-stopped
     command:
       - redpanda
@@ -34,7 +35,6 @@ services:
 
   redpanda-console:
     image: docker.redpanda.com/redpandadata/console:v2.3.1
-    container_name: redpanda-console
     restart: unless-stopped
     entrypoint: /app/console
     environment:
@@ -48,7 +48,6 @@ services:
 
   prometheus:
     image: prom/prometheus:latest
-    container_name: prometheus
     restart: unless-stopped
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
@@ -61,7 +60,6 @@ services:
 
   grafana:
     image: grafana/grafana:latest
-    container_name: grafana
     restart: unless-stopped
     ports:
       - 9001:3000
