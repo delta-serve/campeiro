@@ -49,7 +49,6 @@ pipeline:
           "destination": match this.passagem.orgao {
             "MAUA-SP" => "sentry",
             "OSASCO/SP" => "sentry",
-            "SIMTRANS-VCA-BA" => "simtrans",
             "SSP-NAVEGANTES/SC" => "navegantes",
             "SSP/GO" => "sspgo",
             _ => "outros"
@@ -167,13 +166,11 @@ pipeline:
                   "timestamp": now().format_timestamp("2006-01-02 15:04:05", "America/Sao_Paulo"),
                   "timestamp_unix": now().ts_unix(),
                   "outputs": {
-                    "total": 5,
-                     "active": ["eventos_kafka", "sentry_rabbitmq", "protenet_http", "simtrans_kafka", "sspgo_kafka"],
+                    "total": 3,
+                     "active": ["sentry_rabbitmq", "protenet_http", "sspgo_kafka"],
                     "destinations": {
-                      "kafka_archive": "ab-retorno-renavam-eventos (raw data)",
                        "rabbitmq_sentry": "RabbitMQ SENTRY (empresa MULTIWAY ou 7LAN)",
                       "http_protenet": "HTTP PROTENET (empresa PROTENET)",
-                      "kafka_simtrans": "Kafka SIMTRANS-VCA-BA (empresa SIMTRANS_VCA)",
                        "kafka_sspgo": "Kafka SSP/GO (orgao SSP/GO)"
                     }
                   },
@@ -185,7 +182,7 @@ pipeline:
                 ========================================
                 [HEALTH CHECK] Pipeline AB Retorno RENAVAM
                 Status: OPERACIONAL ✓
-                Outputs Ativos: 5/5
+                Outputs Ativos: 3/3
                  Empresas: 2 (SENTRY[MULTIWAY+7LAN], PROTENET)
                  Protocolos: 3 (Kafka, AMQP, HTTP)
                 ========================================
@@ -199,22 +196,6 @@ output:
   broker:
     pattern: fan_out
     outputs:
-      # Envia evento bruto para tópico 'eventos'
-      - label: ab_retorno_renavam_output_eventos
-        kafka:
-          addresses: [ "${DEV_KAFKA_BROKER}" ]
-          topic: "eventos"
-          key: ${! this.placa }
-          batching:
-            count: ${CMV_KAFKA_OUTPUT_BATCH_COUNT:100}
-            period: ${CMV_KAFKA_OUTPUT_BATCH_PERIOD:5s}
-        processors:
-          - bloblang: 'root = @raw_event.parse_json()'
-          - metric:
-              name: renavam_eventos_raw_sent_total
-              type: counter
-              value: "1"
-
       # Envia evento processado por destino
       - label: ab_retorno_renavam_output_switch
         switch:
@@ -257,30 +238,6 @@ output:
                             labels:
                               output: sentry_rabbitmq
                             value: ${! @m_processing_latency_ns }
-
-            - check: this.orgao == "SIMTRANS-VCA-BA"
-              output:
-                label: ab_retorno_renavam_output_simtrans
-                kafka:
-                  addresses: [ "${DEV_KAFKA_BROKER}" ]
-                  topic: "simtrans"
-                  key: ${! this.placa }
-                  batching:
-                    count: ${CMV_KAFKA_OUTPUT_BATCH_COUNT:100}
-                    period: ${CMV_KAFKA_OUTPUT_BATCH_PERIOD:5s}
-                processors:
-                  - metric:
-                      name: renavam_output_delivery_latency_ns
-                      type: timing
-                      labels:
-                        output: simtrans_kafka
-                      value: ${! ((now().ts_unix() - @data_recebimento_unix.or(0)) * 1000000000).string() }
-                  - metric:
-                      name: renavam_processing_latency_ns
-                      type: timing
-                      labels:
-                        output: simtrans_kafka
-                      value: ${! @m_processing_latency_ns }
 
             - check: this.empresa == "PROTENET"
               output:
