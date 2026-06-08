@@ -51,6 +51,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
     ports:
       - 9190:9090
     extra_hosts:
@@ -67,6 +68,7 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=admin
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning
+      - grafana-data:/var/lib/grafana
     depends_on:
       - prometheus
     networks:
@@ -74,6 +76,8 @@ services:
 
 volumes:
   redpanda-data:
+  prometheus-data:
+  grafana-data:
 
 networks:
   redpanda_network:
