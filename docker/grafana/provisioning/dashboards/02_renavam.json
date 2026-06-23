@@ -349,7 +349,7 @@
           }
         },
         {
-          "expr": "sum(increase(renavam_http_navegantes_sent_total[$__range]))",
+          "expr": "sum(increase(renavam_http_navegantes_sent_total{destination=~\"$destination\"}[$__range]))",
           "legendFormat": "HTTP",
           "refId": "B",
           "datasource": {
@@ -358,7 +358,7 @@
           }
         },
         {
-          "expr": "sum(increase(renavam_rabbitmq_sentry_sent_total[$__range]))",
+          "expr": "sum(increase(renavam_rabbitmq_sentry_sent_total{destination=~\"$destination\"}[$__range]))",
           "legendFormat": "RabbitMQ",
           "refId": "C",
           "datasource": {
@@ -454,7 +454,7 @@
           }
         },
         {
-          "expr": "sum(rate(renavam_http_navegantes_sent_total[1m]))",
+          "expr": "sum(rate(renavam_http_navegantes_sent_total{destination=~\"$destination\"}[1m]))",
           "legendFormat": "HTTP",
           "refId": "B",
           "datasource": {
@@ -463,7 +463,7 @@
           }
         },
         {
-          "expr": "sum(rate(renavam_rabbitmq_sentry_sent_total[1m]))",
+          "expr": "sum(rate(renavam_rabbitmq_sentry_sent_total{destination=~\"$destination\"}[1m]))",
           "legendFormat": "RabbitMQ",
           "refId": "C",
           "datasource": {
@@ -1283,7 +1283,7 @@
           },
           "targets": [
             {
-              "expr": "sum(increase(renavam_http_navegantes_sent_total[$__range]))",
+          "expr": "sum(increase(renavam_http_navegantes_sent_total{destination=~\"$destination\"}[$__range]))",
               "refId": "A",
               "datasource": {
                 "type": "prometheus",
@@ -1324,7 +1324,7 @@
           },
           "targets": [
             {
-              "expr": "sum(increase(renavam_rabbitmq_sentry_sent_total[$__range]))",
+          "expr": "sum(increase(renavam_rabbitmq_sentry_sent_total{destination=~\"$destination\"}[$__range]))",
               "refId": "A",
               "datasource": {
                 "type": "prometheus",
@@ -1408,7 +1408,7 @@
           },
           "targets": [
             {
-              "expr": "sum(rate(renavam_http_navegantes_sent_total[1m]))",
+              "expr": "sum(rate(renavam_http_navegantes_sent_total{destination=~\"$destination\"}[1m]))",
               "refId": "A",
               "datasource": {
                 "type": "prometheus",
@@ -1451,7 +1451,7 @@
           },
           "targets": [
             {
-              "expr": "sum(rate(renavam_rabbitmq_sentry_sent_total[1m]))",
+              "expr": "sum(rate(renavam_rabbitmq_sentry_sent_total{destination=~\"$destination\"}[1m]))",
               "refId": "A",
               "datasource": {
                 "type": "prometheus",
@@ -1791,7 +1791,7 @@
               }
             },
             {
-              "expr": "sum(rate(renavam_http_navegantes_sent_total[1m]))",
+              "expr": "sum(rate(renavam_http_navegantes_sent_total{destination=~\"$destination\"}[1m]))",
               "legendFormat": "HTTP",
               "refId": "B",
               "datasource": {
@@ -1800,7 +1800,7 @@
               }
             },
             {
-              "expr": "sum(rate(renavam_rabbitmq_sentry_sent_total[1m]))",
+              "expr": "sum(rate(renavam_rabbitmq_sentry_sent_total{destination=~\"$destination\"}[1m]))",
               "legendFormat": "RabbitMQ",
               "refId": "C",
               "datasource": {
