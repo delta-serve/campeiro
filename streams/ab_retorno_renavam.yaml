@@ -29,7 +29,7 @@ pipeline:
           "placa": this.passagem.placa,
           "data_passagem": this.passagem.dataPassagem.ts_tz("UTC").ts_format("2006-01-02T15:04:05Z07:00"),
           "orgao": this.passagem.orgao,
-          "empresa": this.passagem.empresa,
+          "empresa": this.passagem.empresa,  # SSP/GO atua como empresa provedora, preenchendo ambos os papéis (orgao e empresa)
           "equipamento": this.passagem.equipamentoCodigo,
           "status": this.status,
           "veiculo": if this.status == "OK" {
@@ -246,16 +246,21 @@ output:
                         # Apenas para MULTIWAY; 7LAN e outros passam direto.
                         # Fail-open: se Redis falhar, permite mensagem passar.
                         #
+                        # Arquitetura (3 passos):
+                        #   1. branch: obtém contagem do Redis, incrementa, decide over_limit
+                        #   2. bloblang: copia _over_limit do branch (metadata não sai automaticamente)
+                        #   3. bloblang: deleta se over_limit (FORA do branch — branch não aceita deleted() child)
+                        #
                         # IMPORTANTE: cache GET falha com erro quando a chave não existe (not_found).
-                        # Para evitar que o erro cancele todo o bloco try (impedindo cache SET de executar),
-                        # o cache SET fica FORA do try/catch, garantindo que o contador sempre seja incrementado.
+                        # O cache SET fica FORA do try/catch do GET para garantir que sempre execute.
                         - branch:
                             request_map: |
                               root = if this.empresa == "MULTIWAY" { this } else { deleted() }
                             processors:
                               # Bloco 1: Obter contagem atual do Redis
-                              # Se a chave existe → calcula novo count e limit
-                              # Se a chave não existe (not_found) → assume count = 0
+                              # NOTA: GET-then-SET não é atômico (race condition).
+                              # Sob alta concorrência, dois workers podem ler o mesmo count e ambos incrementar,
+                              # resultando em leve over-count. Aceitável como trade-off do fail-open.
                               - try:
                                   - bloblang: |
                                       meta _original = this
@@ -278,7 +283,6 @@ output:
                                       meta _over_limit = "false"
                                       root = this
                               # Bloco 2: Sempre incrementar contador (FORA do try/catch)
-                              # Mesmo que cache GET falhe, o SET deve executar para criar/atualizar a chave
                               - try:
                                   - cache:
                                       resource: redis
@@ -287,17 +291,25 @@ output:
                                       value: ${! @_new_count }
                                       ttl: "1h"
                               - catch:
-                                  # Redis SET falhou → fail-open, apenas continua
+                                  # Redis SET falhou → fail-open
                                   - bloblang: |
                                       root = this
-                              # Bloco 3: Métrica e decisão de drop
+                              # Bloco 3: Métrica
                               - metric:
                                   name: renavam_rate_limited_total
                                   type: counter
                                   value: ${! if @_over_limit == "true" { "1" } else { "0" } }
+                              # NÃO usar deleted() aqui — branch espera output batch == input batch
                               - bloblang: |
-                                  root = if @_over_limit == "true" { deleted() } else { this }
-                            result_map: 'root = this'
+                                  root = this
+                            # Copia metadata _over_limit para fora do branch
+                            # (metadata de dentro do branch NÃO é copiada automaticamente)
+                            result_map: |
+                              meta _over_limit = metadata("_over_limit")
+                              root = this
+                        # Decisão de drop FORA do branch — branch não aceita deleted() como output
+                        - bloblang: |
+                            root = if @_over_limit == "true" { deleted() } else { this }
                         # Métricas de envio (APÓS rate limit — refletem entrega efetiva)
                         - metric:
                             name: renavam_rabbitmq_sentry_sent_total
