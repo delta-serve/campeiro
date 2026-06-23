@@ -106,6 +106,26 @@
         "multi": true,
         "refresh": 2,
         "sort": 1
+      },
+      {
+        "name": "orgao",
+        "label": "Orgão",
+        "description": "Filtro por órgão de origem do evento (ex: MAUA-SP, SSP/GO)",
+        "type": "query",
+        "query": "label_values(renavam_messages_by_orgao, orgao)",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus_ds"
+        },
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "multi": true,
+        "refresh": 2,
+        "sort": 1
       }
     ]
   },

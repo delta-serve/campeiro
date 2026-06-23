@@ -103,6 +103,17 @@ pipeline:
           empresa: ${! @m_empresa }
         value: "1"
 
+    # Métrica: Cruzamento empresa × órgão
+    # Permite responder: "qual empresa possui eventos de determinado órgão?"
+    # ~65 órgãos × ~10 empresas = ~650 séries (cardinalidade controlada)
+    - metric:
+        name: renavam_messages_by_empresa_orgao
+        type: counter
+        labels:
+          empresa: ${! @m_empresa }
+          orgao: ${! @m_orgao }
+        value: "1"
+
     # Métrica: Distribuição por órgão e status
     # Substitui renavam_messages_by_equipamento_status (alta cardinalidade: 4.605 equipamentos × status = 6.105 séries)
     # ~65 órgãos x 3 status = ~195 séries (redução de 97%)
