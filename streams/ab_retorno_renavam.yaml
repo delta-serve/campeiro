@@ -302,12 +302,6 @@ output:
                             result_map: |
                               meta _over_limit = metadata("_over_limit")
                               root = this
-                        # Métrica: conta mensagens rate-limited (FORA do branch, onde _over_limit está disponível)
-                        # NOTA: removida de dentro do branch pois incrementava para toda mensagem
-                        - metric:
-                            name: renavam_rate_limited_total
-                            type: counter
-                            value: ${! if @_over_limit == "true" { "1" } else { "0" } }
                         # Decisão de drop FORA do branch — branch não aceita deleted() como output
                         - bloblang: |
                             root = if @_over_limit == "true" { deleted() } else { this }

@@ -270,7 +270,7 @@
       "gridPos": { "h": 5, "w": 3, "x": 17, "y": 1 },
       "targets": [
         {
-          "expr": "sum(increase(renavam_rate_limited_total[$__range]))",
+          "expr": "clamp_min(sum(increase(renavam_messages_eligible_total{empresa=\"MULTIWAY\"}[$__range])) - sum(increase(renavam_rabbitmq_sentry_sent_total{empresa=\"MULTIWAY\"}[$__range])), 0)",
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
         }
@@ -361,7 +361,7 @@
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
         },
         {
-          "expr": "sum(rate(renavam_rate_limited_total[1m]))",
+          "expr": "clamp_min(sum(rate(renavam_messages_eligible_total{empresa=\"MULTIWAY\"}[1m])) - sum(rate(renavam_rabbitmq_sentry_sent_total{empresa=\"MULTIWAY\"}[1m])), 0)",
           "legendFormat": "Rate Limited",
           "refId": "D",
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
@@ -837,7 +837,7 @@
       "gridPos": { "h": 5, "w": 4, "x": 8, "y": 51 },
       "targets": [
         {
-          "expr": "sum(increase(renavam_rate_limited_total[$__range]))",
+          "expr": "clamp_min(sum(increase(renavam_messages_eligible_total{empresa=\"MULTIWAY\"}[$__range])) - sum(increase(renavam_rabbitmq_sentry_sent_total{empresa=\"MULTIWAY\"}[$__range])), 0)",
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
         }
@@ -916,7 +916,7 @@
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
         },
         {
-          "expr": "sum(rate(renavam_rate_limited_total[1m]))",
+          "expr": "clamp_min(sum(rate(renavam_messages_eligible_total{empresa=\"MULTIWAY\"}[1m])) - sum(rate(renavam_rabbitmq_sentry_sent_total{empresa=\"MULTIWAY\"}[1m])), 0)",
           "legendFormat": "Descartados",
           "refId": "C",
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
@@ -980,7 +980,7 @@
       "gridPos": { "h": 9, "w": 6, "x": 18, "y": 56 },
       "targets": [
         {
-          "expr": "sum(increase(renavam_rate_limited_total[1h]))",
+          "expr": "clamp_min(sum(increase(renavam_messages_eligible_total{empresa=\"MULTIWAY\"}[1h])) - sum(increase(renavam_rabbitmq_sentry_sent_total{empresa=\"MULTIWAY\"}[1h])), 0)",
           "legendFormat": "Rate Limited / hora",
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
