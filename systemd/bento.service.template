@@ -21,6 +21,13 @@ ExecStart=/usr/local/bin/bento \
   -c config/service.yaml \
   -r config/resources/*.yaml \
   streams streams/*.yaml
+
+# Reload: Bento streams mode não suporta hot-reload via sinais.
+# ExecReload envia SIGHUP que encerra o processo, e o Restart=always
+# reinicia automaticamente (efetua reload completo).
+# Para reload granular via API HTTP, usar: just reload-pipeline <nome>
+ExecReload=/bin/kill -HUP $MAINPID
+
 # Restart automático
 Restart=always
 RestartSec=10s
