@@ -46,7 +46,7 @@ pipeline:
           } else {
             {}
           },
-          "destination": match this.empresa {
+          "destination": match this.passagem.empresa {
             "MULTIWAY" => "sentry",
             "7LAN" => "sentry",
             "PROTENET" => "navegantes",
@@ -256,7 +256,7 @@ output:
                                   - cache:
                                       resource: redis
                                       operator: get
-                                      key: ${! "renavam_hourly_multiway:" + now().ts_format("2006-01-02T15", "UTC") }
+                                      key: ${! "renavam_hourly_multiway:" + now().ts_tz("UTC").ts_format("2006-01-02T15") }
                                   - bloblang: |
                                       let count = this.string().number().catch(0)
                                       let limit = ${RENAVAM_RATE_LIMIT_COUNT:10000}.number()
@@ -272,7 +272,7 @@ output:
                                   - cache:
                                       resource: redis
                                       operator: set
-                                      key: ${! "renavam_hourly_multiway:" + now().ts_format("2006-01-02T15", "UTC") }
+                                      key: ${! "renavam_hourly_multiway:" + now().ts_tz("UTC").ts_format("2006-01-02T15") }
                                       value: ${! @_new_count }
                                       ttl: "1h"
                                   - bloblang: |
