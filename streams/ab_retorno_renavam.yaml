@@ -222,6 +222,46 @@ output:
                         max_in_flight: 64
                         timeout: "${RABBITMQ_SENTRY_TIMEOUT:30s}"
                       processors:
+                        # Rate limit: configurable via RENAVAM_RATE_LIMIT_COUNT (default 10000)
+                        # Apenas para MULTIWAY; 7LAN e outros passam direto.
+                        # Fail-open: se Redis falhar, permite mensagem passar.
+                        - branch:
+                            request_map: |
+                              root = if this.empresa == "MULTIWAY" { this } else { deleted() }
+                            processors:
+                              - try:
+                                  - bloblang: |
+                                      meta _original = this
+                                      root = this
+                                  - cache:
+                                      resource: redis
+                                      operator: get
+                                      key: ${! "renavam_hourly_multiway:" + now().ts_format("2006-01-02T15", "UTC") }
+                                  - bloblang: |
+                                      let count = this.string().number().catch(0)
+                                      let limit = ${RENAVAM_RATE_LIMIT_COUNT:10000}.number()
+                                      meta _new_count = ($count + 1).string()
+                                      meta _over_limit = if $count >= $limit { "true" } else { "false" }
+                                      root = if $count >= $limit { this } else { @_original }
+                                  - metric:
+                                      name: renavam_rate_limited_total
+                                      type: counter
+                                      value: ${! if @_over_limit == "true" { "1" } else { "0" } }
+                                  - bloblang: |
+                                      root = if @_over_limit == "true" { deleted() } else { @_original }
+                                  - cache:
+                                      resource: redis
+                                      operator: set
+                                      key: ${! "renavam_hourly_multiway:" + now().ts_format("2006-01-02T15", "UTC") }
+                                      value: ${! @_new_count }
+                                      ttl: "1h"
+                                  - bloblang: |
+                                      root = this.without("_original").without("_new_count").without("_over_limit")
+                              - catch:
+                                  - bloblang: |
+                                      root = this.without("_original").without("_new_count").without("_over_limit")
+                            result_map: 'root = this'
+                        # Métricas de envio
                         - metric:
                             name: renavam_rabbitmq_sentry_sent_total
                             type: counter
@@ -276,31 +316,7 @@ output:
                             output: navegantes_http
                           value: ${! @m_processing_latency_ns }
 
-            # Mensagens não roteadas explicitamente: amostragem de 2%
-            # ~98% das mensagens são descartadas para reduzir I/O no Kafka
-            # random_int(0, 49) == 0 → probabilidade 1/50 = 2%
-            - output:
-                label: ab_retorno_renavam_output_outros
-                kafka:
-                  addresses: [ "${DEV_KAFKA_BROKER}" ]
-                  topic: "outros"
-                  key: ${! this.placa }
-                  batching:
-                    count: ${CMV_KAFKA_OUTPUT_BATCH_COUNT:100}
-                    period: ${CMV_KAFKA_OUTPUT_BATCH_PERIOD:5s}
-                processors:
-                  - bloblang: |
-                      # Amostragem 2%: descarta ~98% das mensagens não roteadas
-                      root = if random_int(min: 0, max: 49) == 0 {
-                        this
-                      } else {
-                        deleted()
-                      }
-
-      # SSP/GO - Kafka SASL_PLAINTEXT
-      - label: ab_retorno_renavam_output_sspgo
-        switch:
-          cases:
+            # SSP/GO - Kafka SASL_PLAINTEXT
             - check: this.empresa == "SSP/GO"
               output:
                 label: ab_retorno_renavam_kafka_sspgo
@@ -332,12 +348,24 @@ output:
                           labels:
                             output: sspgo_kafka
                           value: ${! @m_processing_latency_ns }
-            - output:
-                drop: {}
 
-      # Roteamento por empresa (adicione cases conforme necessário)
-      # Para ativar, substitua o drop abaixo por um switch com pelo menos 2 cases:
-      #   check: this.empresa == "NOME_DA_EMPRESA"
-      #   output: kafka ou http_client
-      - label: ab_retorno_renavam_output_empresa
-        drop: {}
+            # Mensagens não roteadas explicitamente: amostragem de 2%
+            # ~98% das mensagens são descartadas para reduzir I/O no Kafka
+            # random_int(0, 49) == 0 → probabilidade 1/50 = 2%
+            - output:
+                label: ab_retorno_renavam_output_outros
+                kafka:
+                  addresses: [ "${DEV_KAFKA_BROKER}" ]
+                  topic: "outros"
+                  key: ${! this.placa }
+                  batching:
+                    count: ${CMV_KAFKA_OUTPUT_BATCH_COUNT:100}
+                    period: ${CMV_KAFKA_OUTPUT_BATCH_PERIOD:5s}
+                processors:
+                  - bloblang: |
+                      # Amostragem 2%: descarta ~98% das mensagens não roteadas
+                      root = if random_int(min: 0, max: 49) == 0 {
+                        this
+                      } else {
+                        deleted()
+                      }
