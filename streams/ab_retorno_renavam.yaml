@@ -245,10 +245,17 @@ output:
                         # Rate limit: configurable via RENAVAM_RATE_LIMIT_COUNT (default 10000)
                         # Apenas para MULTIWAY; 7LAN e outros passam direto.
                         # Fail-open: se Redis falhar, permite mensagem passar.
+                        #
+                        # IMPORTANTE: cache GET falha com erro quando a chave não existe (not_found).
+                        # Para evitar que o erro cancele todo o bloco try (impedindo cache SET de executar),
+                        # o cache SET fica FORA do try/catch, garantindo que o contador sempre seja incrementado.
                         - branch:
                             request_map: |
                               root = if this.empresa == "MULTIWAY" { this } else { deleted() }
                             processors:
+                              # Bloco 1: Obter contagem atual do Redis
+                              # Se a chave existe → calcula novo count e limit
+                              # Se a chave não existe (not_found) → assume count = 0
                               - try:
                                   - bloblang: |
                                       meta _original = this
@@ -260,26 +267,36 @@ output:
                                   - bloblang: |
                                       let count = this.string().number().catch(0)
                                       let limit = ${RENAVAM_RATE_LIMIT_COUNT:10000}.number()
-                                      meta _new_count = ($count + 1).string()
+                                      let new_count = $count + 1
+                                      meta _new_count = $new_count.string()
                                       meta _over_limit = if $count >= $limit { "true" } else { "false" }
-                                      root = if $count >= $limit { this } else { @_original }
-                                  - metric:
-                                      name: renavam_rate_limited_total
-                                      type: counter
-                                      value: ${! if @_over_limit == "true" { "1" } else { "0" } }
+                                      root = @_original
+                              - catch:
+                                  # Chave não existe (primeira mensagem do hora) → count = 0, new_count = 1
                                   - bloblang: |
-                                      root = if @_over_limit == "true" { deleted() } else { @_original }
+                                      meta _new_count = "1"
+                                      meta _over_limit = "false"
+                                      root = this
+                              # Bloco 2: Sempre incrementar contador (FORA do try/catch)
+                              # Mesmo que cache GET falhe, o SET deve executar para criar/atualizar a chave
+                              - try:
                                   - cache:
                                       resource: redis
                                       operator: set
                                       key: ${! "renavam_hourly_multiway:" + now().ts_tz("UTC").ts_format("2006-01-02T15") }
                                       value: ${! @_new_count }
                                       ttl: "1h"
-                                  - bloblang: |
-                                      root = this.without("_original").without("_new_count").without("_over_limit")
                               - catch:
+                                  # Redis SET falhou → fail-open, apenas continua
                                   - bloblang: |
-                                      root = this.without("_original").without("_new_count").without("_over_limit")
+                                      root = this
+                              # Bloco 3: Métrica e decisão de drop
+                              - metric:
+                                  name: renavam_rate_limited_total
+                                  type: counter
+                                  value: ${! if @_over_limit == "true" { "1" } else { "0" } }
+                              - bloblang: |
+                                  root = if @_over_limit == "true" { deleted() } else { this }
                             result_map: 'root = this'
                         # Métricas de envio (APÓS rate limit — refletem entrega efetiva)
                         - metric:
