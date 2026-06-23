@@ -163,7 +163,7 @@
       "gridPos": { "h": 5, "w": 4, "x": 5, "y": 1 },
       "targets": [
         {
-          "expr": "sum(increase(renavam_rabbitmq_sentry_sent_total[$__range]))",
+          "expr": "sum(increase(renavam_rabbitmq_sentry_sent_total{destination=~\"$destination\"}[$__range]))",
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
         }
@@ -192,7 +192,7 @@
       "gridPos": { "h": 5, "w": 4, "x": 9, "y": 1 },
       "targets": [
         {
-          "expr": "sum(increase(renavam_http_navegantes_sent_total[$__range]))",
+          "expr": "sum(increase(renavam_http_navegantes_sent_total{destination=~\"$destination\"}[$__range]))",
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
         }
@@ -221,7 +221,7 @@
       "gridPos": { "h": 5, "w": 4, "x": 13, "y": 1 },
       "targets": [
         {
-          "expr": "sum(increase(renavam_kafka_sspgo_sent_total[$__range]))",
+          "expr": "sum(increase(renavam_kafka_sspgo_sent_total{destination=~\"$destination\"}[$__range]))",
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
         }
@@ -283,7 +283,7 @@
       "gridPos": { "h": 5, "w": 4, "x": 20, "y": 1 },
       "targets": [
         {
-          "expr": "clamp_max(clamp_min(100 - (sum(rate(output_error{stream=\"ab_retorno_renavam\"}[5m])) / clamp_min(sum(rate(output_batch_sent{stream=\"ab_retorno_renavam\"}[5m])), 0.001)) * 100, 0), 100) or vector(100)",
+          "expr": "clamp_max(clamp_min(100 - (sum(rate(output_error{stream=\"ab_retorno_renavam\", label=~\"$bento_label\"}[5m])) / clamp_min(sum(rate(output_batch_sent{stream=\"ab_retorno_renavam\", label=~\"$bento_label\"}[5m])), 0.001)) * 100, 0), 100) or vector(100)",
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
         }
@@ -323,19 +323,19 @@
       "gridPos": { "h": 9, "w": 16, "x": 0, "y": 7 },
       "targets": [
         {
-          "expr": "sum(rate(renavam_rabbitmq_sentry_sent_total[1m]))",
+          "expr": "sum(rate(renavam_rabbitmq_sentry_sent_total{destination=~\"$destination\"}[1m]))",
           "legendFormat": "SENTRY (RabbitMQ)",
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
         },
         {
-          "expr": "sum(rate(renavam_http_navegantes_sent_total[1m]))",
+          "expr": "sum(rate(renavam_http_navegantes_sent_total{destination=~\"$destination\"}[1m]))",
           "legendFormat": "NAVEGANTES (HTTP)",
           "refId": "B",
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
         },
         {
-          "expr": "sum(rate(renavam_kafka_sspgo_sent_total[1m]))",
+          "expr": "sum(rate(renavam_kafka_sspgo_sent_total{destination=~\"$destination\"}[1m]))",
           "legendFormat": "SSP/GO (Kafka)",
           "refId": "C",
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
@@ -372,19 +372,19 @@
       "gridPos": { "h": 9, "w": 8, "x": 16, "y": 7 },
       "targets": [
         {
-          "expr": "sum(increase(renavam_rabbitmq_sentry_sent_total[$__range]))",
+          "expr": "sum(increase(renavam_rabbitmq_sentry_sent_total{destination=~\"$destination\"}[$__range]))",
           "legendFormat": "SENTRY",
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
         },
         {
-          "expr": "sum(increase(renavam_http_navegantes_sent_total[$__range]))",
+          "expr": "sum(increase(renavam_http_navegantes_sent_total{destination=~\"$destination\"}[$__range]))",
           "legendFormat": "NAVEGANTES",
           "refId": "B",
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
         },
         {
-          "expr": "sum(increase(renavam_kafka_sspgo_sent_total[$__range]))",
+          "expr": "sum(increase(renavam_kafka_sspgo_sent_total{destination=~\"$destination\"}[$__range]))",
           "legendFormat": "SSP/GO",
           "refId": "C",
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
@@ -753,21 +753,152 @@
       "panels": []
     },
     {
-      "title": "MULTIWAY: Entregues vs Rate Limited",
-      "description": "Comparação entre eventos MULTIWAY entregues (máx 10k/h) e descartados pelo rate limit.",
-      "type": "timeseries",
-      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 51 },
+      "title": "MULTIWAY: Elegíveis (antes do rate limit)",
+      "description": "Total de mensagens MULTIWAY que chegaram ao output SENTRY, antes da aplicação do rate limit.",
+      "type": "stat",
+      "gridPos": { "h": 5, "w": 4, "x": 0, "y": 51 },
       "targets": [
         {
-          "expr": "sum(rate(renavam_rabbitmq_sentry_sent_total[1m]))",
-          "legendFormat": "Entregues (SENTRY)",
+          "expr": "sum(increase(renavam_messages_eligible_total{empresa=\"MULTIWAY\"}[$__range]))",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "blue", "value": null }]
+          },
+          "unit": "short",
+          "decimals": 0
+        }
+      },
+      "options": {
+        "textMode": "value",
+        "graphMode": "area",
+        "colorMode": "value"
+      }
+    },
+    {
+      "title": "MULTIWAY: Entregues (após rate limit)",
+      "description": "Mensagens MULTIWAY efetivamente entregues ao SENTRY (após passar pelo rate limit).",
+      "type": "stat",
+      "gridPos": { "h": 5, "w": 4, "x": 4, "y": 51 },
+      "targets": [
+        {
+          "expr": "sum(increase(renavam_rabbitmq_sentry_sent_total{empresa=\"MULTIWAY\"}[$__range]))",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }]
+          },
+          "unit": "short",
+          "decimals": 0
+        }
+      },
+      "options": {
+        "textMode": "value",
+        "graphMode": "area",
+        "colorMode": "value"
+      }
+    },
+    {
+      "title": "MULTIWAY: Descartados (rate limited)",
+      "description": "Mensagens MULTIWAY descartadas por exceder o limite de 10k/hora.",
+      "type": "stat",
+      "gridPos": { "h": 5, "w": 4, "x": 8, "y": 51 },
+      "targets": [
+        {
+          "expr": "sum(increase(renavam_rate_limited_total[$__range]))",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 100 },
+              { "color": "red", "value": 1000 }
+            ]
+          },
+          "unit": "short",
+          "decimals": 0
+        }
+      },
+      "options": {
+        "textMode": "value",
+        "graphMode": "area",
+        "colorMode": "value"
+      }
+    },
+    {
+      "title": "MULTIWAY: Utilização (%)",
+      "description": "Percentual de mensagens entregues vs elegíveis. Abaixo de 100% indica rate limit ativo.",
+      "type": "gauge",
+      "gridPos": { "h": 5, "w": 4, "x": 12, "y": 51 },
+      "targets": [
+        {
+          "expr": "clamp_max(sum(increase(renavam_rabbitmq_sentry_sent_total{empresa=\"MULTIWAY\"}[$__range])) / clamp_min(sum(increase(renavam_messages_eligible_total{empresa=\"MULTIWAY\"}[$__range])), 1) * 100, 100) or vector(100)",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "green", "value": 90 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "showThresholdLabels": true,
+        "showThresholdMarkers": true
+      }
+    },
+    {
+      "title": "MULTIWAY: Elegíveis vs Entregues vs Descartados",
+      "description": "Evolução temporal: mensagens que chegaram (elegíveis), que foram entregues, e que foram descartadas pelo rate limit.",
+      "type": "timeseries",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 56 },
+      "targets": [
+        {
+          "expr": "sum(rate(renavam_messages_eligible_total{empresa=\"MULTIWAY\"}[1m]))",
+          "legendFormat": "Elegíveis (total)",
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
         },
         {
-          "expr": "sum(rate(renavam_rate_limited_total[1m]))",
-          "legendFormat": "Rate Limited",
+          "expr": "sum(rate(renavam_rabbitmq_sentry_sent_total{empresa=\"MULTIWAY\"}[1m]))",
+          "legendFormat": "Entregues",
           "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
+        },
+        {
+          "expr": "sum(rate(renavam_rate_limited_total[1m]))",
+          "legendFormat": "Descartados",
+          "refId": "C",
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
         }
       ],
@@ -775,11 +906,12 @@
         "defaults": {
           "color": { "mode": "palette-classic" },
           "unit": "msgps",
-          "custom": { "fillOpacity": 20, "lineWidth": 2 }
+          "custom": { "fillOpacity": 15, "lineWidth": 2 }
         },
         "overrides": [
-          { "matcher": { "id": "byName", "options": "Entregues (SENTRY)" }, "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }] },
-          { "matcher": { "id": "byName", "options": "Rate Limited" }, "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }] }
+          { "matcher": { "id": "byName", "options": "Elegíveis (total)" }, "properties": [{ "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "Entregues" }, "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "Descartados" }, "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }] }
         ]
       },
       "options": {
@@ -791,10 +923,10 @@
       "title": "MULTIWAY: Quota Utilizada (%)",
       "description": "Percentual da quota de 10k/hora utilizada. Acima de 100% indica rate limit ativo.",
       "type": "gauge",
-      "gridPos": { "h": 9, "w": 6, "x": 12, "y": 51 },
+      "gridPos": { "h": 9, "w": 6, "x": 12, "y": 56 },
       "targets": [
         {
-          "expr": "clamp_max(sum(rate(renavam_rabbitmq_sentry_sent_total[1h])) / 10000 * 100, 100) or vector(0)",
+          "expr": "clamp_max(sum(rate(renavam_rabbitmq_sentry_sent_total{empresa=\"MULTIWAY\"}[1h])) / 10000 * 100, 100) or vector(0)",
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
         }
@@ -825,7 +957,7 @@
       "title": "MULTIWAY: Rate Limit Acumulado (hora)",
       "description": "Total de eventos rate-limited por hora ao longo do tempo.",
       "type": "timeseries",
-      "gridPos": { "h": 9, "w": 6, "x": 18, "y": 51 },
+      "gridPos": { "h": 9, "w": 6, "x": 18, "y": 56 },
       "targets": [
         {
           "expr": "sum(increase(renavam_rate_limited_total[1h]))",

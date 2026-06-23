@@ -46,10 +46,10 @@ pipeline:
           } else {
             {}
           },
-          "destination": match this.passagem.orgao {
-            "MAUA-SP" => "sentry",
-            "OSASCO/SP" => "sentry",
-            "SSP-NAVEGANTES/SC" => "navegantes",
+          "destination": match this.empresa {
+            "MULTIWAY" => "sentry",
+            "7LAN" => "sentry",
+            "PROTENET" => "navegantes",
             "SSP/GO" => "sspgo",
             _ => "outros"
           }
@@ -222,6 +222,15 @@ output:
                         max_in_flight: 64
                         timeout: "${RABBITMQ_SENTRY_TIMEOUT:30s}"
                       processors:
+                        # Métrica: Mensagens elegíveis para entrega (ANTES do rate limit)
+                        # Conta todas as mensagens que chegam ao output SENTRY (MULTIWAY + 7LAN)
+                        - metric:
+                            name: renavam_messages_eligible_total
+                            type: counter
+                            labels:
+                              destination: sentry
+                              empresa: ${! this.empresa.or("DESCONHECIDA") }
+                            value: "1"
                         # Rate limit: configurable via RENAVAM_RATE_LIMIT_COUNT (default 10000)
                         # Apenas para MULTIWAY; 7LAN e outros passam direto.
                         # Fail-open: se Redis falhar, permite mensagem passar.
@@ -261,10 +270,13 @@ output:
                                   - bloblang: |
                                       root = this.without("_original").without("_new_count").without("_over_limit")
                             result_map: 'root = this'
-                        # Métricas de envio
+                        # Métricas de envio (APÓS rate limit — refletem entrega efetiva)
                         - metric:
                             name: renavam_rabbitmq_sentry_sent_total
                             type: counter
+                            labels:
+                              destination: sentry
+                              empresa: ${! this.empresa.or("DESCONHECIDA") }
                             value: "1"
                         - metric:
                             name: renavam_output_delivery_latency_ns
@@ -302,6 +314,8 @@ output:
                       - metric:
                           name: renavam_http_navegantes_sent_total
                           type: counter
+                          labels:
+                            destination: navegantes
                           value: "1"
                       - metric:
                           name: renavam_output_delivery_latency_ns
@@ -335,6 +349,8 @@ output:
                       - metric:
                           name: renavam_kafka_sspgo_sent_total
                           type: counter
+                          labels:
+                            destination: sspgo
                           value: "1"
                       - metric:
                           name: renavam_output_delivery_latency_ns
