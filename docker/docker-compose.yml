@@ -60,7 +60,7 @@ services:
       - redpanda_network
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:13.1.0
     restart: unless-stopped
     ports:
       - 9001:3000

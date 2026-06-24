@@ -180,12 +180,12 @@ pipeline:
                     "total": 3,
                      "active": ["sentry_rabbitmq", "protenet_http", "sspgo_kafka"],
                     "destinations": {
-                       "rabbitmq_sentry": "RabbitMQ SENTRY (empresa MULTIWAY ou 7LAN)",
+                         "rabbitmq_sentry": "RabbitMQ SENTRY (empresa MULTIWAY ou 7LAN — rate limit compartilhado)",
                       "http_protenet": "HTTP PROTENET (empresa PROTENET)",
                        "kafka_sspgo": "Kafka SSP/GO (orgao SSP/GO)"
                     }
                   },
-                  "empresas_suportadas": ["SENTRY (MULTIWAY, 7LAN)", "PROTENET"],
+                  "empresas_suportadas": ["SENTRY (MULTIWAY+7LAN, rate limit compartilhado)", "PROTENET"],
                   "protocolos": ["Kafka", "AMQP 0.9", "HTTP"],
                   "status": "HEALTHY"
                 }
@@ -194,7 +194,7 @@ pipeline:
                 [HEALTH CHECK] Pipeline AB Retorno RENAVAM
                 Status: OPERACIONAL ✓
                 Outputs Ativos: 3/3
-                 Empresas: 2 (SENTRY[MULTIWAY+7LAN], PROTENET)
+                 Empresas: 2 (SENTRY[MULTIWAY+7LAN, rate limit compartilhado], PROTENET)
                  Protocolos: 3 (Kafka, AMQP, HTTP)
                 ========================================
         result_map: 'root = deleted()'  # Não modifica mensagem original
@@ -243,7 +243,7 @@ output:
                               empresa: ${! this.empresa.or("DESCONHECIDA") }
                             value: "1"
                         # Rate limit: configurable via RENAVAM_RATE_LIMIT_COUNT (default 10000)
-                        # Apenas para MULTIWAY; 7LAN e outros passam direto.
+                        # Aplicado para MULTIWAY e 7LAN; outros passam direto.
                         # Fail-open: se Redis falhar, permite mensagem passar.
                         #
                         # Arquitetura (3 passos):
@@ -255,7 +255,7 @@ output:
                         # O cache SET fica FORA do try/catch do GET para garantir que sempre execute.
                         - branch:
                             request_map: |
-                              root = if this.empresa == "MULTIWAY" { this } else { deleted() }
+                              root = if this.empresa == "MULTIWAY" || this.empresa == "7LAN" { this } else { deleted() }
                             processors:
                               # Bloco 1: Obter contagem atual do Redis
                               # NOTA: GET-then-SET não é atômico (race condition).
