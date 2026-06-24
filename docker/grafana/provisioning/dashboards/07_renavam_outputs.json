@@ -803,12 +803,12 @@
     },
     {
       "title": "MULTIWAY: Entregues (após rate limit)",
-      "description": "Total acumulado de mensagens MULTIWAY entregues ao SENTRY. Usa valor bruto do counter (não fica zero quando rate limit bloqueia tudo).",
+      "description": "Mensagens MULTIWAY entregues ao SENTRY no período selecionado (após passar pelo rate limit).",
       "type": "stat",
       "gridPos": { "h": 5, "w": 4, "x": 4, "y": 51 },
       "targets": [
         {
-          "expr": "sum(renavam_rabbitmq_sentry_sent_total{empresa=\"MULTIWAY\", path!~\".*processors\\\\.2.*\"}) or vector(0)",
+          "expr": "sum(increase(renavam_rabbitmq_sentry_sent_total{empresa=\"MULTIWAY\", path!~\".*processors\\\\.2.*\"}[$__range])) or vector(0)",
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
         }
