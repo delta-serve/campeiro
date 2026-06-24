@@ -313,6 +313,13 @@ output:
                               destination: sentry
                               empresa: ${! this.empresa.or("DESCONHECIDA") }
                             value: "1"
+                        # Métrica unificada de entrega (todas as empresas)
+                        - metric:
+                            name: renavam_messages_delivered_total
+                            type: counter
+                            labels:
+                              empresa: ${! this.empresa.or("DESCONHECIDA") }
+                            value: "1"
                         - metric:
                             name: renavam_output_delivery_latency_ns
                             type: timing
@@ -352,6 +359,13 @@ output:
                           labels:
                             destination: navegantes
                           value: "1"
+                      # Métrica unificada de entrega (todas as empresas)
+                      - metric:
+                          name: renavam_messages_delivered_total
+                          type: counter
+                          labels:
+                            empresa: ${! this.empresa.or("DESCONHECIDA") }
+                          value: "1"
                       - metric:
                           name: renavam_output_delivery_latency_ns
                           type: timing
@@ -386,6 +400,13 @@ output:
                           type: counter
                           labels:
                             destination: sspgo
+                          value: "1"
+                      # Métrica unificada de entrega (todas as empresas)
+                      - metric:
+                          name: renavam_messages_delivered_total
+                          type: counter
+                          labels:
+                            empresa: ${! this.empresa.or("DESCONHECIDA") }
                           value: "1"
                       - metric:
                           name: renavam_output_delivery_latency_ns

@@ -1,0 +1,299 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "schemaVersion": 39,
+  "tags": ["renavam", "executivo", "gestores"],
+  "templating": {
+    "list": [
+      {
+        "name": "empresa",
+        "label": "Empresa",
+        "type": "query",
+        "query": "label_values(renavam_messages_by_empresa, empresa)",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus_ds"
+        },
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "Todas",
+          "value": "$__all"
+        },
+        "multi": false,
+        "refresh": 2,
+        "sort": 1
+      }
+    ]
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "America/Sao_Paulo",
+  "title": "RENAVAM - Visão Executiva",
+  "uid": "renavam_executivo",
+  "version": 1,
+  "panels": [
+    {
+      "title": "── KPIs NO PERÍODO ──",
+      "type": "row",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "title": "Elegíveis",
+      "description": "Total de mensagens que chegaram ao pipeline no período selecionado.",
+      "type": "stat",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 1 },
+      "targets": [
+        {
+          "expr": "sum(increase(renavam_messages_by_empresa{empresa=~\"$empresa\"}[$__range]))",
+          "refId": "A",
+          "legendFormat": "Elegíveis",
+          "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "blue", "value": null }]
+          },
+          "unit": "short",
+          "decimals": 0
+        }
+      },
+      "options": {
+        "textMode": "value",
+        "graphMode": "area",
+        "colorMode": "value"
+      }
+    },
+    {
+      "title": "Entregues",
+      "description": "Mensagens efetivamente entregues aos destinos no período selecionado.",
+      "type": "stat",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 1 },
+      "targets": [
+        {
+          "expr": "sum(increase(renavam_messages_delivered_total{empresa=~\"$empresa\"}[$__range])) or vector(0)",
+          "refId": "A",
+          "legendFormat": "Entregues",
+          "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }]
+          },
+          "unit": "short",
+          "decimals": 0
+        }
+      },
+      "options": {
+        "textMode": "value",
+        "graphMode": "area",
+        "colorMode": "value"
+      }
+    },
+    {
+      "title": "Descartados",
+      "description": "Mensagens não entregues (rate limit, erros, amostragem).",
+      "type": "stat",
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 1 },
+      "targets": [
+        {
+          "expr": "clamp_min(sum(increase(renavam_messages_by_empresa{empresa=~\"$empresa\"}[$__range])) - sum(increase(renavam_messages_delivered_total{empresa=~\"$empresa\"}[$__range])) or vector(0), 0)",
+          "refId": "A",
+          "legendFormat": "Descartados",
+          "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 100 },
+              { "color": "red", "value": 1000 }
+            ]
+          },
+          "unit": "short",
+          "decimals": 0
+        }
+      },
+      "options": {
+        "textMode": "value",
+        "graphMode": "area",
+        "colorMode": "value"
+      }
+    },
+    {
+      "title": "Taxa de Entrega",
+      "description": "Percentual de mensagens entregues vs elegíveis. Abaixo de 100% indica rate limit ou erros.",
+      "type": "gauge",
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 1 },
+      "targets": [
+        {
+          "expr": "clamp_max(sum(increase(renavam_messages_delivered_total{empresa=~\"$empresa\"}[$__range])) / clamp_min(sum(increase(renavam_messages_by_empresa{empresa=~\"$empresa\"}[$__range])), 1) * 100, 100) or vector(100)",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "green", "value": 90 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "showThresholdLabels": true,
+        "showThresholdMarkers": true
+      }
+    },
+    {
+      "title": "── TAXA DE ENTREGA AO LONGO DO TEMPO ──",
+      "type": "row",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 6 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "title": "Elegíveis vs Entregues (msg/s)",
+      "description": "Quando a linha verde fica abaixo da azul, o rate limit está ativo. O ponto de divergência indica quando na hora o limite foi atingido.",
+      "type": "timeseries",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 7 },
+      "targets": [
+        {
+          "expr": "sum(rate(renavam_messages_by_empresa{empresa=~\"$empresa\"}[1m]))",
+          "legendFormat": "Elegíveis",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
+        },
+        {
+          "expr": "sum(rate(renavam_messages_delivered_total{empresa=~\"$empresa\"}[1m])) or vector(0)",
+          "legendFormat": "Entregues",
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
+        },
+        {
+          "expr": "clamp_min(sum(rate(renavam_messages_by_empresa{empresa=~\"$empresa\"}[1m])) - sum(rate(renavam_messages_delivered_total{empresa=~\"$empresa\"}[1m])) or vector(0), 0)",
+          "legendFormat": "Descartados",
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "msgps",
+          "custom": { "fillOpacity": 20, "lineWidth": 2 }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Elegíveis" }, "properties": [{ "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "Entregues" }, "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "Descartados" }, "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }] }
+        ]
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "last"] },
+        "tooltip": { "mode": "multi" }
+      }
+    },
+    {
+      "title": "── DETALHAMENTO POR EMPRESA ──",
+      "type": "row",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 17 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "title": "Elegíveis vs Entregues por Empresa",
+      "description": "Compara elegíveis e entregues para cada empresa no período.",
+      "type": "bargauge",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 18 },
+      "targets": [
+        {
+          "expr": "topk(10, sum by (empresa) (increase(renavam_messages_by_empresa{empresa=~\"$empresa\"}[$__range])))",
+          "legendFormat": "{{empresa}}",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "short",
+          "decimals": 0
+        }
+      }
+    },
+    {
+      "title": "Taxa de Entrega por Empresa",
+      "description": "Percentual de entrega por empresa. Empresas com rate limit aparecem abaixo de 100%.",
+      "type": "bargauge",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 18 },
+      "targets": [
+        {
+          "expr": "clamp_max(sum by (empresa) (increase(renavam_messages_delivered_total{empresa=~\"$empresa\"}[$__range])) / clamp_min(sum by (empresa) (increase(renavam_messages_by_empresa{empresa=~\"$empresa\"}[$__range])), 1) * 100, 100) or (sum by (empresa) (increase(renavam_messages_by_empresa{empresa=~\"$empresa\"}[$__range])) > 0) * 100",
+          "legendFormat": "{{empresa}}",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "green", "value": 90 }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}
