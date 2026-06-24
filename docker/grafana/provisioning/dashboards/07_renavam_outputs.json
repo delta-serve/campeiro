@@ -183,7 +183,7 @@
       "gridPos": { "h": 5, "w": 4, "x": 5, "y": 1 },
       "targets": [
         {
-          "expr": "sum(increase(renavam_rabbitmq_sentry_sent_total{destination=~\"$destination\"}[$__range])) or sum(increase(renavam_rabbitmq_sentry_sent_total{empresa=\"7LAN\"}[$__range]))",
+          "expr": "sum(increase(renavam_rabbitmq_sentry_sent_total{destination=~\"$destination\", path!~\".*processors\\\\.2.*\"}[$__range])) or sum(increase(renavam_rabbitmq_sentry_sent_total{empresa=\"7LAN\", path!~\".*processors\\\\.2.*\"}[$__range]))",
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
         }
@@ -270,7 +270,7 @@
       "gridPos": { "h": 5, "w": 3, "x": 17, "y": 1 },
       "targets": [
         {
-          "expr": "(clamp_min(sum(increase(renavam_messages_eligible_total{empresa=\"MULTIWAY\"}[$__range])) - sum(increase(renavam_rabbitmq_sentry_sent_total{empresa=\"MULTIWAY\"}[$__range])), 0)) or sum(increase(renavam_messages_eligible_total{empresa=\"MULTIWAY\"}[$__range]))",
+          "expr": "(clamp_min(sum(increase(renavam_messages_eligible_total{empresa=\"MULTIWAY\"}[$__range])) - sum(increase(renavam_rabbitmq_sentry_sent_total{empresa=\"MULTIWAY\", path!~\".*processors\\\\.2.*\"}[$__range])), 0)) or sum(increase(renavam_messages_eligible_total{empresa=\"MULTIWAY\"}[$__range]))",
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
         }
@@ -343,7 +343,7 @@
       "gridPos": { "h": 9, "w": 16, "x": 0, "y": 7 },
       "targets": [
         {
-          "expr": "sum(rate(renavam_rabbitmq_sentry_sent_total{destination=~\"$destination\"}[1m])) or sum(rate(renavam_rabbitmq_sentry_sent_total{empresa=\"7LAN\"}[1m]))",
+          "expr": "sum(rate(renavam_rabbitmq_sentry_sent_total{destination=~\"$destination\", path!~\".*processors\\\\.2.*\"}[1m])) or sum(rate(renavam_rabbitmq_sentry_sent_total{empresa=\"7LAN\", path!~\".*processors\\\\.2.*\"}[1m]))",
           "legendFormat": "SENTRY (RabbitMQ)",
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
@@ -361,7 +361,7 @@
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
         },
         {
-          "expr": "(clamp_min(sum(rate(renavam_messages_eligible_total{empresa=\"MULTIWAY\"}[1m])) - sum(rate(renavam_rabbitmq_sentry_sent_total{empresa=\"MULTIWAY\"}[1m])), 0)) or sum(rate(renavam_messages_eligible_total{empresa=\"MULTIWAY\"}[1m]))",
+          "expr": "(clamp_min(sum(rate(renavam_messages_eligible_total{empresa=\"MULTIWAY\"}[1m])) - sum(rate(renavam_rabbitmq_sentry_sent_total{empresa=\"MULTIWAY\", path!~\".*processors\\\\.2.*\"}[1m])), 0)) or sum(rate(renavam_messages_eligible_total{empresa=\"MULTIWAY\"}[1m]))",
           "legendFormat": "Rate Limited",
           "refId": "D",
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
@@ -392,7 +392,7 @@
       "gridPos": { "h": 9, "w": 8, "x": 16, "y": 7 },
       "targets": [
         {
-          "expr": "sum(increase(renavam_rabbitmq_sentry_sent_total{destination=~\"$destination\"}[$__range])) or sum(increase(renavam_rabbitmq_sentry_sent_total{empresa=\"7LAN\"}[$__range]))",
+          "expr": "sum(increase(renavam_rabbitmq_sentry_sent_total{destination=~\"$destination\", path!~\".*processors\\\\.2.*\"}[$__range])) or sum(increase(renavam_rabbitmq_sentry_sent_total{empresa=\"7LAN\", path!~\".*processors\\\\.2.*\"}[$__range]))",
           "legendFormat": "SENTRY",
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
@@ -808,7 +808,7 @@
       "gridPos": { "h": 5, "w": 4, "x": 4, "y": 51 },
       "targets": [
         {
-          "expr": "sum(renavam_rabbitmq_sentry_sent_total{empresa=\"MULTIWAY\"}) or vector(0)",
+          "expr": "sum(renavam_rabbitmq_sentry_sent_total{empresa=\"MULTIWAY\", path!~\".*processors\\\\.2.*\"}) or vector(0)",
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
         }
@@ -837,7 +837,7 @@
       "gridPos": { "h": 5, "w": 4, "x": 8, "y": 51 },
       "targets": [
         {
-          "expr": "(clamp_min(sum(increase(renavam_messages_eligible_total{empresa=\"MULTIWAY\"}[$__range])) - sum(increase(renavam_rabbitmq_sentry_sent_total{empresa=\"MULTIWAY\"}[$__range])), 0)) or sum(increase(renavam_messages_eligible_total{empresa=\"MULTIWAY\"}[$__range]))",
+          "expr": "(clamp_min(sum(increase(renavam_messages_eligible_total{empresa=\"MULTIWAY\"}[$__range])) - sum(increase(renavam_rabbitmq_sentry_sent_total{empresa=\"MULTIWAY\", path!~\".*processors\\\\.2.*\"}[$__range])), 0)) or sum(increase(renavam_messages_eligible_total{empresa=\"MULTIWAY\"}[$__range]))",
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
         }
@@ -870,7 +870,7 @@
       "gridPos": { "h": 5, "w": 4, "x": 12, "y": 51 },
       "targets": [
         {
-          "expr": "clamp_max(sum(increase(renavam_rabbitmq_sentry_sent_total{empresa=\"MULTIWAY\"}[$__range])) / clamp_min(sum(increase(renavam_messages_eligible_total{empresa=\"MULTIWAY\"}[$__range])), 1) * 100, 100) or vector(100)",
+          "expr": "clamp_max(sum(increase(renavam_rabbitmq_sentry_sent_total{empresa=\"MULTIWAY\", path!~\".*processors\\\\.2.*\"}[$__range])) / clamp_min(sum(increase(renavam_messages_eligible_total{empresa=\"MULTIWAY\"}[$__range])), 1) * 100, 100) or vector(100)",
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
         }
@@ -910,13 +910,13 @@
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
         },
         {
-          "expr": "sum(rate(renavam_rabbitmq_sentry_sent_total{empresa=\"MULTIWAY\"}[1m])) or vector(0)",
+          "expr": "sum(rate(renavam_rabbitmq_sentry_sent_total{empresa=\"MULTIWAY\", path!~\".*processors\\\\.2.*\"}[1m])) or vector(0)",
           "legendFormat": "Entregues",
           "refId": "B",
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
         },
         {
-          "expr": "(clamp_min(sum(rate(renavam_messages_eligible_total{empresa=\"MULTIWAY\"}[1m])) - sum(rate(renavam_rabbitmq_sentry_sent_total{empresa=\"MULTIWAY\"}[1m])), 0)) or sum(rate(renavam_messages_eligible_total{empresa=\"MULTIWAY\"}[1m]))",
+          "expr": "(clamp_min(sum(rate(renavam_messages_eligible_total{empresa=\"MULTIWAY\"}[1m])) - sum(rate(renavam_rabbitmq_sentry_sent_total{empresa=\"MULTIWAY\", path!~\".*processors\\\\.2.*\"}[1m])), 0)) or sum(rate(renavam_messages_eligible_total{empresa=\"MULTIWAY\"}[1m]))",
           "legendFormat": "Descartados",
           "refId": "C",
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
@@ -946,7 +946,7 @@
       "gridPos": { "h": 9, "w": 6, "x": 12, "y": 56 },
       "targets": [
         {
-          "expr": "clamp_max(sum(increase(renavam_rabbitmq_sentry_sent_total{empresa=\"MULTIWAY\"}[1h])) / 10000 * 100, 100) or (sum(increase(renavam_messages_eligible_total{empresa=\"MULTIWAY\"}[1h])) > bool 0) * 100",
+          "expr": "clamp_max(sum(increase(renavam_rabbitmq_sentry_sent_total{empresa=\"MULTIWAY\", path!~\".*processors\\\\.2.*\"}[1h])) / 10000 * 100, 100) or (sum(increase(renavam_messages_eligible_total{empresa=\"MULTIWAY\"}[1h])) > bool 0) * 100",
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
         }
@@ -980,7 +980,7 @@
       "gridPos": { "h": 9, "w": 6, "x": 18, "y": 56 },
       "targets": [
         {
-          "expr": "(clamp_min(sum(increase(renavam_messages_eligible_total{empresa=\"MULTIWAY\"}[1h])) - sum(increase(renavam_rabbitmq_sentry_sent_total{empresa=\"MULTIWAY\"}[1h])), 0)) or sum(increase(renavam_messages_eligible_total{empresa=\"MULTIWAY\"}[1h]))",
+          "expr": "(clamp_min(sum(increase(renavam_messages_eligible_total{empresa=\"MULTIWAY\"}[1h])) - sum(increase(renavam_rabbitmq_sentry_sent_total{empresa=\"MULTIWAY\", path!~\".*processors\\\\.2.*\"}[1h])), 0)) or sum(increase(renavam_messages_eligible_total{empresa=\"MULTIWAY\"}[1h]))",
           "legendFormat": "Rate Limited / hora",
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" }
