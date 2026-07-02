@@ -51,6 +51,7 @@ pipeline:
             "7LAN" => "sentry",
             "PROTENET" => "navegantes",
             "SSP/GO" => "sspgo",
+            "XEQMATE" => "xeqmate",
             _ => "outros"
           }
         }
@@ -177,12 +178,13 @@ pipeline:
                   "timestamp": now().format_timestamp("2006-01-02 15:04:05", "America/Sao_Paulo"),
                   "timestamp_unix": now().ts_unix(),
                   "outputs": {
-                    "total": 3,
-                     "active": ["sentry_rabbitmq", "protenet_http", "sspgo_kafka"],
+                    "total": 4,
+                     "active": ["sentry_rabbitmq", "protenet_http", "sspgo_kafka", "xeqmate_http"],
                     "destinations": {
                          "rabbitmq_sentry": "RabbitMQ SENTRY (empresa MULTIWAY ou 7LAN — rate limit compartilhado)",
                       "http_protenet": "HTTP PROTENET (empresa PROTENET)",
-                       "kafka_sspgo": "Kafka SSP/GO (orgao SSP/GO)"
+                       "kafka_sspgo": "Kafka SSP/GO (orgao SSP/GO)",
+                      "xeqmate_http": "HTTP XEQMATE (empresa XEQMATE)"
                     }
                   },
                   "empresas_suportadas": ["SENTRY (MULTIWAY+7LAN, rate limit compartilhado)", "PROTENET"],
@@ -193,9 +195,9 @@ pipeline:
                 ========================================
                 [HEALTH CHECK] Pipeline AB Retorno RENAVAM
                 Status: OPERACIONAL ✓
-                Outputs Ativos: 3/3
-                 Empresas: 2 (SENTRY[MULTIWAY+7LAN, rate limit compartilhado], PROTENET)
-                 Protocolos: 3 (Kafka, AMQP, HTTP)
+                 Outputs Ativos: 4/4
+                  Empresas: 3 (SENTRY[MULTIWAY+7LAN, rate limit compartilhado], PROTENET, XEQMATE)
+                  Protocolos: 3 (Kafka, AMQP, HTTP)
                 ========================================
         result_map: 'root = deleted()'  # Não modifica mensagem original
 
@@ -377,6 +379,52 @@ output:
                           type: timing
                           labels:
                             output: navegantes_http
+                          value: ${! @m_processing_latency_ns }
+
+            - check: this.empresa == "XEQMATE"
+              output:
+                label: ab_retorno_renavam_output_xeqmate
+                http_client:
+                  url: "${HTTP_OUTPUT_XEQMATE_URL}"
+                  verb: POST
+                  headers:
+                    Content-Type: application/json
+                    Authorization: "Bearer ${HTTP_OUTPUT_XEQMATE_TOKEN:0}"
+                  timeout: "${HTTP_OUTPUT_XEQMATE_TIMEOUT:30s}"
+                  retries: ${HTTP_OUTPUT_XEQMATE_RETRIES:3}
+                  retry_period: "1s"
+                  max_retry_backoff: "30s"
+                  drop_on: [400, 401, 403, 404, 405, 422]
+                  batching:
+                    count: ${HTTP_OUTPUT_XEQMATE_BATCH_COUNT:100}
+                    period: "${HTTP_OUTPUT_XEQMATE_BATCH_PERIOD:5s}"
+                    processors:
+                      # Métrica unificada de entrega — ANTES do archive para contar por mensagem
+                      - metric:
+                          name: renavam_messages_delivered_total
+                          type: counter
+                          labels:
+                            empresa: ${! this.empresa.or("DESCONHECIDA") }
+                          value: "1"
+                      - archive:
+                          format: json_array
+                      - metric:
+                          name: renavam_http_xeqmate_sent_total
+                          type: counter
+                          labels:
+                            destination: xeqmate
+                          value: "1"
+                      - metric:
+                          name: renavam_output_delivery_latency_ns
+                          type: timing
+                          labels:
+                            output: xeqmate_http
+                          value: ${! ((now().ts_unix() - @data_recebimento_unix.or(0)) * 1000000000).string() }
+                      - metric:
+                          name: renavam_processing_latency_ns
+                          type: timing
+                          labels:
+                            output: xeqmate_http
                           value: ${! @m_processing_latency_ns }
 
             # SSP/GO - Kafka SASL_PLAINTEXT
