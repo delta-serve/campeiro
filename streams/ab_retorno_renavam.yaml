@@ -395,37 +395,32 @@ output:
                   retry_period: "1s"
                   max_retry_backoff: "30s"
                   drop_on: [400, 401, 403, 404, 405, 422]
-                  batching:
-                    count: ${HTTP_OUTPUT_XEQMATE_BATCH_COUNT:100}
-                    period: "${HTTP_OUTPUT_XEQMATE_BATCH_PERIOD:5s}"
-                    processors:
-                      # Métrica unificada de entrega — ANTES do archive para contar por mensagem
-                      - metric:
-                          name: renavam_messages_delivered_total
-                          type: counter
-                          labels:
-                            empresa: ${! this.empresa.or("DESCONHECIDA") }
-                          value: "1"
-                      - archive:
-                          format: json_array
-                      - metric:
-                          name: renavam_http_xeqmate_sent_total
-                          type: counter
-                          labels:
-                            destination: xeqmate
-                          value: "1"
-                      - metric:
-                          name: renavam_output_delivery_latency_ns
-                          type: timing
-                          labels:
-                            output: xeqmate_http
-                          value: ${! ((now().ts_unix() - @data_recebimento_unix.or(0)) * 1000000000).string() }
-                      - metric:
-                          name: renavam_processing_latency_ns
-                          type: timing
-                          labels:
-                            output: xeqmate_http
-                          value: ${! @m_processing_latency_ns }
+                processors:
+                  # Métrica unificada de entrega
+                  - metric:
+                      name: renavam_messages_delivered_total
+                      type: counter
+                      labels:
+                        empresa: ${! this.empresa.or("DESCONHECIDA") }
+                      value: "1"
+                  - metric:
+                      name: renavam_http_xeqmate_sent_total
+                      type: counter
+                      labels:
+                        destination: xeqmate
+                      value: "1"
+                  - metric:
+                      name: renavam_output_delivery_latency_ns
+                      type: timing
+                      labels:
+                        output: xeqmate_http
+                      value: ${! ((now().ts_unix() - @data_recebimento_unix.or(0)) * 1000000000).string() }
+                  - metric:
+                      name: renavam_processing_latency_ns
+                      type: timing
+                      labels:
+                        output: xeqmate_http
+                      value: ${! @m_processing_latency_ns }
 
             # SSP/GO - Kafka SASL_PLAINTEXT
             - check: this.empresa == "SSP/GO"
