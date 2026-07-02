@@ -2,7 +2,7 @@
 # Variáveis de ambiente: ${VARIABLE_NAME:default_value}
 
 http:
-  address: ${BENTO_HTTP_ADDRESS:0.0.0.0:8081}
+  address: 0.0.0.0:${BENTO_HTTP_PORT:10083}
   enabled: true
   root_path: /bento
   debug_endpoints: false
